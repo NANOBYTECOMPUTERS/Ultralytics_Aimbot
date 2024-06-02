@@ -155,9 +155,9 @@ def get_aimbot_current_version():
 def get_aimbot_online_version():
     app = 0
     config = 0
-    content = requests.get('https://github.com/NANOBYTECOMPUTERS/yolobotter').content.decode('utf-8').split('\n')
+    content = requests.get('https://raw.githubusercontent.com/NANOBYTECOMPUTERS/yolobotter/main/version').content.decode('utf-8').split('\n')
     if content == ['404: Not Found']:
-        print('Something wrong with https://raw.githubusercontent.com.\NANOBYTECOMPUTERS repository is still alive?')
+        print('Something wrong with repo 404 error')
         return 0, 0
     else:
         for line in content:
