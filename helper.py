@@ -215,7 +215,7 @@ def print_menu():
     print('Run this script as an administrator for install TensorRT correctly.')
     print('Installed version: {0}, online version: {1}\n'.format(get_aimbot_current_version()[0], get_aimbot_online_version()[0]))
 
-    print("1: Update/Reinstall yolobotter")
+    print("1: null")
     print("2: Download Cuda 12.4")
     print("3: Install TensorRT 10")
     print("4: Test the object detector")
@@ -229,7 +229,7 @@ def main():
             choice = input("Select an option: ")
 
             if choice == "1":
-                Update_yolobotter()
+               print("Incorrect input, try again.")
             
             elif choice == "2":
                 Install_cuda()
