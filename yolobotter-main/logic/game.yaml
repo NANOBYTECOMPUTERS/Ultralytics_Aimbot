@@ -1,8 +1,0 @@
-path: game
-train: images
-val: val
-test:
-
-names:
-  0: head
-  1: player
