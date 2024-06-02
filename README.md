@@ -132,6 +132,9 @@ cd C:\Users\your_username\downloads\yolov8_aimbot-main
 3. Then export the model from the .pt format in .engine format.
 ```cmd
 yolo export model="models/test.pt" format=engine device=0 imgsz=480 half=True
+a better model is here https://www.mediafire.com/file/160fmhl89hjeo3p/model1.pt/file
+yolo export model="models/model1.pt" format=engine device=0 imgsz=640 half=True
+
 ```
   - `model="model_path/model_name.pt"`: Path to model.
   - `format=engine`: TensorRT model format.
