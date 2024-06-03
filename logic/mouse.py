@@ -16,6 +16,7 @@ from logic.buttons import Buttons
 from logic.config_watcher import cfg
 from logic.visual import visuals
 
+
 LONG = c_long
 DWORD = c_ulong
 ULONG_PTR = POINTER(DWORD)
@@ -55,18 +56,24 @@ class Mouse_net(nn.Module):
         return x
 
 class OneEuroFilter:
-    def __init__(self, freq, mincutoff=1.0, beta=0.7, dcutoff=1.5):
-        self.freq = 60
+    def __init__(self, freq, mincutoff=1.0, beta=0.5, dcutoff=1.0):
+        self.freq = freq
         self.mincutoff = mincutoff
         self.beta = beta
         self.dcutoff = dcutoff
         self.x_prev = 0.0
-        self.dx_prev = 0.0
+        self.dx_prev = 0.5
         self.t_prev = -1
+
+
 
     def __call__(self, x):
         t_e = 1.0 / self.freq
+        def exponential_smoothing(a, x, x_prev):
+         return a * x + (1 - a) * x_prev
 
+        def smoothing_factor(t_e, cutoff):
+         return 1.0 / (1.0 + 2.0 * math.pi * cutoff * t_e)
         if self.t_prev != -1:
             t_e = t_prev + t_e
 
@@ -96,24 +103,53 @@ class MouseThread():
         self.prev_x = 0
         self.prev_y = 0
         self.filter_mode = filter_mode
+        self.min_cutoff = 0.1
+        self.beta = 0.9
+        self.d_cutoff = 1.0
 
-        # Calc max_distance as class
+         # Calc max_distance as class
         self.max_distance = math.sqrt(self.screen_width**2 + self.screen_height**2)
 
         # Initializes Kal filter
         if filter_mode == "kalman" or filter_mode == "kalman_one_euro":
             self.kf = KalmanFilter(dim_x=4, dim_z=2)
-            # ... (Set up kf.F, kf.H, kf.P, kf.R, kf.Q) ...
-        
+            # Assuming a time interval of 0.02 seconds @60fps its 0.166
+            dt = 0.017
+
+            # State transition matrix
+            F = np.array([[1, 0, dt, 0],
+                          [0, 1, 0, dt],
+                          [0, 0, 1, 0],
+                          [0, 0, 0, 1]])
+
+            # Observation matrix
+            H = np.array([[1, 0, 0, 0],
+                          [0, 1, 0, 0]])
+
+            # Initial state covariance matrix
+            P = np.diag([100, 100, 10, 1])
+
+            # Process noise covariance matrix
+            Q = np.diag([0.1, 0.1, 0.01, 0.01])
+
+            # Measurement noise covariance matrix
+            R = np.diag([5, 5])
+
+            # Initialize Kalman filter
+            self.kf = KalmanFilter(dim_x=4, dim_z=2)
+            self.kf.F = F
+            self.kf.H = H
+            self.kf.P = P
+            self.kf.Q = Q
+            self.kf.R = R
+
         # Initialize filter objects if needed
         if filter_mode == "kalman_one_euro":
-            self.x_filter = OneEuroFilter(1.0 / cfg.fps, self.min_cutoff, self.beta, self.d_cutoff)
-            self.y_filter = OneEuroFilter(1.0 / cfg.fps, self.min_cutoff, self.beta, self.d_cutoff)
-        
-        self.min_cutoff = 0.001
-        self.beta = 0.9
-        self.d_cutoff = 1.0
+            self.x_filter = OneEuroFilter(1.0 / cfg.bettercam_capture_fps / 4, self.min_cutoff, self.beta, self.d_cutoff)
+            self.y_filter = OneEuroFilter(1.0 / cfg.bettercam_capture_fps / 4 , self.min_cutoff, self.beta, self.d_cutoff)
 
+        
+  
         self.is_targeting = False
         self.button_pressed = False
 
@@ -130,12 +166,11 @@ class MouseThread():
                 print(e)
                 print('need mouse_net model')
                 exit()
-            self.model.eval()        
-
+            self.model.eval()  
+            self.model.to(self.device)
+    
     def process_data(self, data):
         if self.get_shooting_key_state():  # Check hotkey
-            target_x = self.screen_width / 2
-            target_y = self.screen_height / 2
             target_x, target_y, target_w, target_h = data
 
             self.is_targeting = self.check_target_in_scope(target_x, target_y, target_w, target_h) if cfg.auto_shoot or cfg.triggerbot else False
@@ -146,7 +181,7 @@ class MouseThread():
             if self.filter_mode != "raw":
                 target_x, target_y = self.get_filtered_mouse_position(target_x, target_y)
 
-            x, y = self.calc_movement(self.center_x, self.center_y)
+            x, y = self.calc_movement(x, y)
             self.move_mouse(x, y)
             self.shoot(self.is_targeting)
         else:
@@ -165,23 +200,40 @@ class MouseThread():
         return False
 
     def predict_target_position(self, target_x, target_y):
-      # Calculate predicted position based on velocity
-      predicted_x = target_x + (target_x - self.prev_x)
-      predicted_y = target_y + (target_y - self.prev_y)
+        velocity_x = target_x - self.prev_x
+        velocity_y = target_y - self.prev_y
+        
+        if velocity_x == 0 and velocity_y == 0:
+            return target_x, target_y
+        
+        if velocity_x == 0:
+            velocity_x = 1
+        if velocity_y == 0:
+            velocity_y = 1
+        
+        if velocity_x < 0:
+            velocity_x = -velocity_x
+        if velocity_y < 0:
+            velocity_y = -velocity_y
+        
+        if velocity_x > velocity_y:
+            velocity_x, velocity_y = velocity_y, velocity_x      
+        
+        if velocity_x == 0 and velocity_y == 0:
+            return target_x, target_y
+        
+        prediction_distance = math.sqrt(velocity_x ** 2 + velocity_y ** 2)
+        
+        if prediction_distance == 0:
+            return target_x, target_y
+    
+        predicted_x = target_x + velocity_x + (velocity_x / abs(velocity_x)) * prediction_distance if velocity_x != 0 else target_x 
+        predicted_y = target_y + velocity_y + (velocity_y / abs(velocity_y)) * prediction_distance if velocity_y != 0 else target_y
 
-      # Calculate error (difference between predicted and target center)
-      error_x = target_x + target_w / 2 - predicted_x  # Adjust for target width/height
-      error_y = target_y + target_h / 2 - predicted_y  # Adjust for target width/height
+        self.prev_x = target_x
+        self.prev_y = target_y
 
-      # Adjust predicted position based on a portion of the error (adjust_factor)
-      adjusted_x = predicted_x + (error_x * adjust_factor)
-      adjusted_y = predicted_y + (error_y * adjust_factor)
-
-      # Update previous position for next prediction
-      self.prev_x = target_x
-      self.prev_y = target_y
-
-      return adjusted_x, adjusted_y
+        return predicted_x, predicted_y
     
     def calc_movement(self, target_x, target_y):
         """Calculates the required mouse movement to aim at the target."""
@@ -193,15 +245,12 @@ class MouseThread():
             target_distance = math.sqrt(offset_x ** 2 + offset_y ** 2)
 
             # Calculate target distance in x and y components
-            target_distance_x = abs(self.screen_width / 2)
-            target_distance_y = abs(self.screen_height / 2)
+            target_distance_x = abs(offset_x)
+            target_distance_y = abs(offset_y)
 
             # Degrees per pixel by FOV and resolution
             degrees_per_pixel_x = self.fov_x / self.screen_width
             degrees_per_pixel_y = self.fov_y / self.screen_height
-            
-            offset_x = target_x + target_w / 2 - predicted_x  # Adjust for target width/height
-            offset_y = target_y + target_h / 2 - predicted_y  # Adjust for target width/height
 
             # Calculate raw mouse move in degrees
             mouse_move_x = offset_x * degrees_per_pixel_x
@@ -212,13 +261,13 @@ class MouseThread():
             move_y = (mouse_move_y / 360) * (self.dpi * (1 / self.mouse_sensitivity))
 
             # Acceleration based on target distance (example)
-            accel_x = 10.0 if target_distance_x < 20 else 12.0
-            accel_y = 10.0 if target_distance_y < 20 else 12.0
+            accel_x = 2.0 if target_distance_x < 20 else 5.0
+            accel_y = 1.0 if target_distance_y < 20 else 0.5
             move_x *= accel_x
             move_y *= accel_y
 
             # Dynamic sensitivity scaling
-            scaling_factor = 0.5 - 1.5 * (target_distance / self.max_distance)
+            scaling_factor = 1.2 - 0.7 * (target_distance / self.max_distance)
             move_x *= scaling_factor
             move_y *= scaling_factor
         
