@@ -55,8 +55,8 @@ class Mouse_net(nn.Module):
         return x
 
 class OneEuroFilter:
-    def __init__(self, freq, mincutoff=1.0, beta=0.2, dcutoff=1.0):
-        self.freq = freq
+    def __init__(self, freq, mincutoff=1.0, beta=0.7, dcutoff=1.5):
+        self.freq = 60
         self.mincutoff = mincutoff
         self.beta = beta
         self.dcutoff = dcutoff
@@ -131,31 +131,11 @@ class MouseThread():
                 print('need mouse_net model')
                 exit()
             self.model.eval()        
-    
-    def target_error_x_membership(error_x):
-        if error_x < 0:
-         return 1 / (1 + math.exp(error_x))
-        else:
-         return 0
-    
-    def mouse_movement_x_membership(movement_x):
-      # Example: Triangular functions for "Slow" and "Medium"
-      if movement_x < -50:
-        return movement_x + 50
-      elif movement_x <= 50:
-        return (movement_x + 50) / 100
-      else:
-        return 0
 
-    def fuzzy_rule_x(target_error_x):
-      error_x_membership_small_neg = target_error_x_membership(target_error_x)
-      movement_x_slow = mouse_movement_x_membership(-20)  # Adjust movement values
-      movement_x_medium = mouse_movement_x_membership(0)
-      # Combine memberships using min or product (adjust based on rule logic)
-      return min(error_x_membership_small_neg, movement_x_slow), min(error_x_membership_small_neg, movement_x_medium)
-    
     def process_data(self, data):
         if self.get_shooting_key_state():  # Check hotkey
+            target_x = self.screen_width / 2
+            target_y = self.screen_height / 2
             target_x, target_y, target_w, target_h = data
 
             self.is_targeting = self.check_target_in_scope(target_x, target_y, target_w, target_h) if cfg.auto_shoot or cfg.triggerbot else False
@@ -166,7 +146,7 @@ class MouseThread():
             if self.filter_mode != "raw":
                 target_x, target_y = self.get_filtered_mouse_position(target_x, target_y)
 
-            x, y = self.calc_movement(x, y)
+            x, y = self.calc_movement(self.center_x, self.center_y)
             self.move_mouse(x, y)
             self.shoot(self.is_targeting)
         else:
@@ -185,103 +165,77 @@ class MouseThread():
         return False
 
     def predict_target_position(self, target_x, target_y):
-        velocity_x = target_x - self.prev_x
-        velocity_y = target_y - self.prev_y
-        # Calculate target distance from center
-        target_distance = math.sqrt((target_x - self.center_x)**2 + (target_y - self.center_y)**2)
+      # Calculate predicted position based on velocity
+      predicted_x = target_x + (target_x - self.prev_x)
+      predicted_y = target_y + (target_y - self.prev_y)
 
-        # Scale prediction distance based on target distance
-        max_prediction_distance = 200  # Maximum pixels to predict ahead (adjust as needed)
-        prediction_distance = max_prediction_distance * (target_distance / self.max_distance)
-        prediction_distance = max(0, min(prediction_distance, max_prediction_distance))  # Clamp between 5 and max_prediction_distance
-        velocity_magnitude = math.sqrt(velocity_x**2 + velocity_y**2)
-        if velocity_magnitude != 0:
-            direction_x = velocity_x / velocity_magnitude
-            direction_y = velocity_y / velocity_magnitude
-        else:
-            direction_x, direction_y = 0, 0
+      # Calculate error (difference between predicted and target center)
+      error_x = target_x + target_w / 2 - predicted_x  # Adjust for target width/height
+      error_y = target_y + target_h / 2 - predicted_y  # Adjust for target width/height
 
-        predicted_x = target_x + direction_x * prediction_distance
-        predicted_y = target_y + direction_y * prediction_distance
+      # Adjust predicted position based on a portion of the error (adjust_factor)
+      adjusted_x = predicted_x + (error_x * adjust_factor)
+      adjusted_y = predicted_y + (error_y * adjust_factor)
 
-        self.prev_x = target_x
-        self.prev_y = target_y
+      # Update previous position for next prediction
+      self.prev_x = target_x
+      self.prev_y = target_y
 
-        return predicted_x, predicted_y
+      return adjusted_x, adjusted_y
     
     def calc_movement(self, target_x, target_y):
         """Calculates the required mouse movement to aim at the target."""
         if cfg.AI_mouse_net == False:
             offset_x = target_x - self.center_x
             offset_y = target_y - self.center_y
-            # Calculate target error
-            error_x = target_x - self.center_x
-            # Apply logic for X-axis movement
-            movement_x_slow_membership, movement_x_medium_membership = fuzzy_rule_x(error_x)
 
-            # Defuzz by center of mass calculation)
-            # Calculate weighted average of movement values based on membership degrees
-            total_membership = movement_x_slow_membership + movement_x_medium_membership
-            if total_membership > 0:
-             movement_x = (movement_x_slow_membership * -20 + movement_x_medium_membership * 0) / total_membership
-             smoothed_movement_x = self.apply_moving_average_filter(movement_x)
-             smoothed_movement_y = self.apply_exponential_smoothing_filter(movement_y)
-              # Deadzone
+            # Calculate overall target distance from the center
+            target_distance = math.sqrt(offset_x ** 2 + offset_y ** 2)
 
-            if abs(error_x) <= cfg.deadzone_width and abs(error_y) <= cfg.deadzone_height:
-             smoothed_movement_x = 0
-             smoothed_movement_y = 0
-            else:
-             movement_x = 0
+            # Calculate target distance in x and y components
+            target_distance_x = abs(self.screen_width / 2)
+            target_distance_y = abs(self.screen_height / 2)
+
+            # Degrees per pixel by FOV and resolution
+            degrees_per_pixel_x = self.fov_x / self.screen_width
+            degrees_per_pixel_y = self.fov_y / self.screen_height
+            
+            offset_x = target_x + target_w / 2 - predicted_x  # Adjust for target width/height
+            offset_y = target_y + target_h / 2 - predicted_y  # Adjust for target width/height
+
+            # Calculate raw mouse move in degrees
+            mouse_move_x = offset_x * degrees_per_pixel_x
+            mouse_move_y = offset_y * degrees_per_pixel_y
+
+            # Convert degrees to mouse movement in pixels
+            move_x = (mouse_move_x / 360) * (self.dpi * (1 / self.mouse_sensitivity))
+            move_y = (mouse_move_y / 360) * (self.dpi * (1 / self.mouse_sensitivity))
+
+            # Acceleration based on target distance (example)
+            accel_x = 10.0 if target_distance_x < 20 else 12.0
+            accel_y = 10.0 if target_distance_y < 20 else 12.0
+            move_x *= accel_x
+            move_y *= accel_y
+
+            # Dynamic sensitivity scaling
+            scaling_factor = 0.5 - 1.5 * (target_distance / self.max_distance)
+            move_x *= scaling_factor
+            move_y *= scaling_factor
+        
         else:  # If AI_mouse_net is enabled
-         input_data = [self.screen_width, self.screen_height, self.center_x, self.center_y,
+            input_data = [self.screen_width, self.screen_height, self.center_x, self.center_y,
                           self.dpi, self.mouse_sensitivity, self.fov_x, self.fov_y,
                           target_x, target_y]
 
-        input_tensor = torch.tensor(input_data, dtype=torch.float32).unsqueeze(0).to(self.device)
+            input_tensor = torch.tensor(input_data, dtype=torch.float32).unsqueeze(0).to(self.device)
 
-        with torch.no_grad():
+            with torch.no_grad():
                 move = self.model(input_tensor).cpu().numpy()
 
-                error_x = move[0][0]
-                error_y = move[0][1]
-
-                offset_x, offset_y = move[0][0], move[0][1]   
-
-         # Calculate overall target distance from the center
-        target_distance = math.sqrt(offset_x ** 2 + offset_y ** 2)
-
-        # Calculate target distance in x and y components
-        target_distance_x = abs(offset_x)
-        target_distance_y = abs(offset_y)
-
-        # Degrees per pixel by FOV and resolution
-        degrees_per_pixel_x = self.fov_x / self.screen_width
-        degrees_per_pixel_y = self.fov_y / self.screen_height
-
-        # Calculate raw mouse move in degrees
-        mouse_move_x = offset_x * degrees_per_pixel_x
-        mouse_move_y = offset_y * degrees_per_pixel_y
-
-        # Convert degrees to mouse movement in pixels
-        move_x = (mouse_move_x / 360) * (self.dpi * (1 / self.mouse_sensitivity))
-        move_y = (mouse_move_y / 360) * (self.dpi * (1 / self.mouse_sensitivity))
-
-        # Acceleration based on target distance (example)
-        accel_x = 5.0 if target_distance_x > 100 else 6.0
-        accel_y = 5.0 if target_distance_y > 100 else 6.0
-        move_x *= accel_x
-        move_y *= accel_y
-
-        # Dynamic sensitivity scaling
-        scaling_factor = 1.0 - 0.6 * (target_distance / self.max_distance)
-        move_x *= scaling_factor
-        move_y *= scaling_factor
-        
-        
+            move_x, move_y = move[0][0], move[0][1]
 
         # Clamp movement values to prevent overflow
-        max_movement = 200
+        max_movement = 300
         move_x = max(-max_movement, min(max_movement, move_x))
         move_y = max(-max_movement, min(max_movement, move_y))
  
@@ -292,35 +246,27 @@ class MouseThread():
         return move_x, move_y #moved outside of if statement
     
     def get_filtered_mouse_position(self, x_raw, y_raw):
-      if self.filter_mode == "raw":
-        return x_raw, y_raw
-      elif self.filter_mode in ("kalman", "kalman_one_euro"):
-        # Kalman filter prediction and update
-        self.kf.predict()
-        self.kf.update(np.array([x_raw, y_raw]).reshape(-1, 1))
+        if self.filter_mode == "raw":
+            return x_raw, y_raw
+        elif self.filter_mode == "kalman":
+            # Kalman filter prediction and update
+            self.kf.predict()
+            self.kf.update(np.array([x_raw, y_raw]).reshape(-1, 1))
+            return self.kf.x[:2]  # Predicted position
+        elif self.filter_mode == "kalman_one_euro":
+            # Kalman filter prediction and update
+            self.kf.predict()
+            self.kf.update(np.array([x_raw, y_raw]).reshape(-1, 1))
+            x_hat, y_hat = self.kf.x[:2]  # Predicted position
+            dx, dy = self.kf.x[2:]  # Predicted velocity
 
-        # Extract predicted position
-        predicted_x, predicted_y = self.kf.x[:2]
+            # Apply OneEuroFilter after Kalman Filter
+            x_hat = self.x_filter(x_hat.item())
+            y_hat = self.y_filter(y_hat.item())
 
-        # Implement exponential smoothing (adjust alpha as needed)
-        alpha = 0.2
-        if not hasattr(self, 'prev_smoothed_x'):
-            self.prev_smoothed_x = predicted_x
-            self.prev_smoothed_y = predicted_y
-        smoothed_x = alpha * predicted_x + (1 - alpha) * self.prev_smoothed_x
-        smoothed_y = alpha * predicted_y + (1 - alpha) * self.prev_smoothed_y
-        self.prev_smoothed_x = smoothed_x
-        self.prev_smoothed_y = smoothed_y
-
-        # Use smoothed position with OneEuro filter (if applicable)
-        x_hat, y_hat = smoothed_x, smoothed_y
-        if self.filter_mode == "kalman_one_euro":
-          x_hat = self.x_filter(x_hat)
-          y_hat = self.y_filter(y_hat)
-    
-        return x_hat, y_hat
-      else:
-        raise ValueError("Invalid filter mode")
+            return x_hat, y_hat
+        else:
+            raise ValueError("Invalid filter mode")
                
     def move_mouse(self, x, y):
         if x is None or y is None:
