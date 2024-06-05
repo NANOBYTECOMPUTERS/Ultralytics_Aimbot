@@ -17,9 +17,6 @@ from logic.config_watcher import cfg
 from logic.visual import visuals
 
 
-
-
-
 LONG = c_long
 DWORD = c_ulong
 ULONG_PTR = POINTER(DWORD)
@@ -65,63 +62,39 @@ class OneEuroFilter:
         self.beta = beta
         self.dcutoff = dcutoff
         self.x_prev = 0.0
-        self.y_prev = 0.0
-        self.dx_prev = 0.0
-class MouseFilter():
-    def __init__(self, freq, mincutoff, beta, dcutoff):
-        self.freq = cfg.bettercam_capture_fps
-        self.mincutoff = mincutoff
-        self.dcutoff = dcutoff
+        self.dx_prev = 0.5
         self.t_prev = -1
-        self.x_prev = 0.0
-        self.y_prev = 0.0
-        self.dx_prev = 0.0
-        self.dy_prev = 0.0
-        self.dx_hat = 0.0
-        self.dy_hat = 0.0  # Add missing variable dy_hat and initialize it to 0.0
+
+
 
     def __call__(self, x):
         t_e = 1.0 / self.freq
-        if self.t_prev == -1:
-            self.x_prev = x
-            self.y_prev = x
-            self.t_prev = t_e
-            return x, 
-    def exponential_smoothing(a, x, y, x_prev, y_prev):
-        return a * x + (1 - a) * x_prev, a * y + (1 - a) * y_prev
+        def exponential_smoothing(a, x, x_prev):
+         return a * x + (1 - a) * x_prev
 
-    def smoothing_factor(t_e, cutoff):
-        return 1.0 / (1.0 + 2.0 * math.pi * cutoff * t_e)
-        
-    def __call__(self, x):
-        t_e = 1.0 / self.freq
+        def smoothing_factor(t_e, cutoff):
+         return 1.0 / (1.0 + 2.0 * math.pi * cutoff * t_e)
         if self.t_prev != -1:
-           t_e = self.t_prev + t_e
-        if t_e < self.freq:
-           a_d = smoothing_factor(t_e, self.dcutoff)
+            t_e = t_prev + t_e
+
+        a_d = smoothing_factor(t_e, self.dcutoff)
         dx = (x - self.x_prev) / t_e
-        dy = (x - self.y_prev) / t_e
-
         dx_hat = exponential_smoothing(a_d, dx, self.dx_prev)
-        dy_hat = exponential_smoothing(a_d, dy, self.y_prev)
 
-        cutoff = self.mincutoff + self.beta * abs(dx_hat, dy_hat)
+        cutoff = self.mincutoff + self.beta * abs(dx_hat)
         a = smoothing_factor(t_e, cutoff)
-        x_hat, = exponential_smoothing(a, x, self.x_prev)
-        y_hat = exponential_smoothing(a, self.y_prev)
+        x_hat = exponential_smoothing(a, x, self.x_prev)
 
         self.x_prev = x_hat
-        self.y_prev = y_hat
         self.dx_prev = dx_hat
         self.t_prev = t_e
-        return x_hat , y_hat
-
+        return x_hat
+    
 class MouseThread():
     def __init__(self, filter_mode="raw"):
         self.dpi = cfg.mouse_dpi
         self.mouse_sensitivity = cfg.mouse_sensitivity
         self.fov_x = cfg.mouse_fov_width
-        self.fov_y = cfg.mouse_fov_height
         self.fov_y = cfg.mouse_fov_height
         self.screen_width = cfg.detection_window_width
         self.screen_height = cfg.detection_window_height
@@ -134,9 +107,49 @@ class MouseThread():
         self.beta = 0.9
         self.d_cutoff = 1.0
 
-        # Calc max_distance as class
+         # Calc max_distance as class
         self.max_distance = math.sqrt(self.screen_width**2 + self.screen_height**2)
 
+        # Initializes Kal filter
+        if filter_mode == "kalman" or filter_mode == "kalman_one_euro":
+            self.kf = KalmanFilter(dim_x=4, dim_z=2)
+            # Assuming a time interval of 0.02 seconds @60fps its 0.166
+            dt = 0.017
+
+            # State transition matrix
+            F = np.array([[1, 0, dt, 0],
+                          [0, 1, 0, dt],
+                          [0, 0, 1, 0],
+                          [0, 0, 0, 1]])
+
+            # Observation matrix
+            H = np.array([[1, 0, 0, 0],
+                          [0, 1, 0, 0]])
+
+            # Initial state covariance matrix
+            P = np.diag([100, 100, 10, 1])
+
+            # Process noise covariance matrix
+            Q = np.diag([0.1, 0.1, 0.01, 0.01])
+
+            # Measurement noise covariance matrix
+            R = np.diag([5, 5])
+
+            # Initialize Kalman filter
+            self.kf = KalmanFilter(dim_x=4, dim_z=2)
+            self.kf.F = F
+            self.kf.H = H
+            self.kf.P = P
+            self.kf.Q = Q
+            self.kf.R = R
+
+        # Initialize filter objects if needed
+        if filter_mode == "kalman_one_euro":
+            self.x_filter = OneEuroFilter(1.0 / cfg.bettercam_capture_fps / 4, self.min_cutoff, self.beta, self.d_cutoff)
+            self.y_filter = OneEuroFilter(1.0 / cfg.bettercam_capture_fps / 4 , self.min_cutoff, self.beta, self.d_cutoff)
+
+        
+  
         self.is_targeting = False
         self.button_pressed = False
 
@@ -153,12 +166,9 @@ class MouseThread():
                 print(e)
                 print('need mouse_net model')
                 exit()
-            self.model.eval()
+            self.model.eval()  
             self.model.to(self.device)
-        else:
-            self.model = None
-
-        self.mouse_filter = MouseFilter(freq=cfg.bettercam_capture_fps, mincutoff=self.min_cutoff, beta=self.beta, dcutoff=self.d_cutoff)
+    
     def process_data(self, data):
         if self.get_shooting_key_state():  # Check hotkey
             target_x, target_y, target_w, target_h = data
@@ -176,19 +186,6 @@ class MouseThread():
             self.shoot(self.is_targeting)
         else:
             self.button_pressed = False
-
-                
-    def get_shooting_key_state(self):
-                for key_name in cfg.hotkey_targeting_list:
-                    key_code = Buttons.KEY_CODES.get(key_name.strip())
-                    if key_code is not None:
-                        if cfg.mouse_lock_target:
-                            state = win32api.GetKeyState(key_code)
-                        else:
-                            state = win32api.GetAsyncKeyState(key_code)
-                        if state < 0 or state == 1:
-                            return True
-                return False
         
     def get_shooting_key_state(self):
         for key_name in cfg.hotkey_targeting_list:
@@ -200,8 +197,7 @@ class MouseThread():
                     state = win32api.GetAsyncKeyState(key_code)
                 if state < 0 or state == 1:
                     return True
-                else:
-                    return False
+        return False
 
     def predict_target_position(self, target_x, target_y):
         velocity_x = target_x - self.prev_x
@@ -222,14 +218,15 @@ class MouseThread():
         
         if velocity_x > velocity_y:
             velocity_x, velocity_y = velocity_y, velocity_x      
+        
         if velocity_x == 0 and velocity_y == 0:
             return target_x, target_y
-
+        
         prediction_distance = math.sqrt(velocity_x ** 2 + velocity_y ** 2)
-
+        
         if prediction_distance == 0:
             return target_x, target_y
-
+    
         predicted_x = target_x + velocity_x + (velocity_x / abs(velocity_x)) * prediction_distance if velocity_x != 0 else target_x 
         predicted_y = target_y + velocity_y + (velocity_y / abs(velocity_y)) * prediction_distance if velocity_y != 0 else target_y
 
@@ -237,7 +234,7 @@ class MouseThread():
         self.prev_y = target_y
 
         return predicted_x, predicted_y
-
+    
     def calc_movement(self, target_x, target_y):
         """Calculates the required mouse movement to aim at the target."""
         if cfg.AI_mouse_net == False:
@@ -264,13 +261,13 @@ class MouseThread():
             move_y = (mouse_move_y / 360) * (self.dpi * (1 / self.mouse_sensitivity))
 
             # Acceleration based on target distance (example)
-            accel_x = 4.0 if target_distance_x > 15 else 6.0
-            accel_y = 3.5 if target_distance_y > 15 else 4.5
+            accel_x = 2.0 if target_distance_x < 20 else 5.0
+            accel_y = 1.0 if target_distance_y < 20 else 0.5
             move_x *= accel_x
             move_y *= accel_y
 
             # Dynamic sensitivity scaling
-            scaling_factor = 1.0 - 0.5 * (target_distance / self.max_distance)
+            scaling_factor = 1.2 - 0.7 * (target_distance / self.max_distance)
             move_x *= scaling_factor
             move_y *= scaling_factor
         
@@ -287,7 +284,7 @@ class MouseThread():
             move_x, move_y = move[0][0], move[0][1]
 
         # Clamp movement values to prevent overflow
-        max_movement = 200
+        max_movement = 300
         move_x = max(-max_movement, min(max_movement, move_x))
         move_y = max(-max_movement, min(max_movement, move_y))
  
@@ -300,9 +297,20 @@ class MouseThread():
     def get_filtered_mouse_position(self, x_raw, y_raw):
         if self.filter_mode == "raw":
             return x_raw, y_raw
-        elif self.filter_mode == "one_euro":
-            x_hat = self.x_filter(x_raw)
-            y_hat = self.y_filter(y_raw)
+        elif self.filter_mode == "kalman":
+            # Kalman filter prediction and update
+            self.kf.predict()
+            self.kf.update(np.array([x_raw, y_raw]).reshape(-1, 1))
+            return self.kf.x[:2]  # Predicted position
+        elif self.filter_mode == "kalman_one_euro":
+            # Kalman filter prediction and update
+            self.kf.predict()
+            self.kf.update(np.array([x_raw, y_raw]).reshape(-1, 1))
+            x_hat, y_hat = self.kf.x[:2]  # Predicted position
+            dx, dy = self.kf.x[2:]  # Predicted velocity
+
+            # Apply OneEuroFilter after Kalman Filter
+            x_hat = self.x_filter(x_hat.item())
             y_hat = self.y_filter(y_hat.item())
 
             return x_hat, y_hat
