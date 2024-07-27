@@ -11,12 +11,12 @@ Due to the large differences in features and functions as well as mine consistan
       <img width="75%" src="https://raw.githubusercontent.com/SunOner/sunone_aimbot/main/media/demo.gif"></a>
   </p>
 </div>
-If you are feeling generous buy me a coffee, spent alot of hours working on stuff.
-PayPal:  https://www.paypal.com/donate/?business=TZFWU8AQRYZY6&no_recurring=0&currency_code=USD 
-CashApp: $DonArrington 
-Bitcoin: 3Cysfhcyh7Jejc1bxJN3sVo9unkrnZPrYE
-Dogecoin: DGQPgt7n7DgjHygwa67XPExi4wyX7zZTC4
-Ethereum: 0x2c8644b5731eF3021b5de7EbE5Df3ec936C11Dc7
+#If you are feeling generous buy me a coffee, spent alot of hours working on stuff.
+>PayPal:  https://www.paypal.com/donate/?business=TZFWU8AQRYZY6&no_recurring=0&currency_code=USD 
+>CashApp: $DonArrington 
+>Bitcoin: 3Cysfhcyh7Jejc1bxJN3sVo9unkrnZPrYE
+>Dogecoin: DGQPgt7n7DgjHygwa67XPExi4wyX7zZTC4
+>Ethereum: 0x2c8644b5731eF3021b5de7EbE5Df3ec936C11Dc7
 
 
 ## Overview
