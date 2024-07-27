@@ -12,12 +12,17 @@ Due to the large differences in features and functions as well as mine consistan
   </p>
 </div>
 #If you are feeling generous buy me a coffee, spent alot of hours working on stuff.
->PayPal:  https://www.paypal.com/donate/?business=TZFWU8AQRYZY6&no_recurring=0&currency_code=USD 
+<br></br>
+PayPal:  https://www.paypal.com/donate/?business=TZFWU8AQRYZY6&no_recurring=0&currency_code=USD 
+<br></br>
 >CashApp: $DonArrington 
+<br></br>
 >Bitcoin: 3Cysfhcyh7Jejc1bxJN3sVo9unkrnZPrYE
+<br></br>
 >Dogecoin: DGQPgt7n7DgjHygwa67XPExi4wyX7zZTC4
+<br></br>
 >Ethereum: 0x2c8644b5731eF3021b5de7EbE5Df3ec936C11Dc7
-
+<br></br>
 
 ## Overview
 an AI-powered aim bot for first-person shooter games. It leverages the YOLOv8 and YOLOv10 models, PyTorch, and various other tools to automatically target and aim at enemies within the game. The AI model in repository has been trained on more than 30,000 images from popular first-person shooter games like Warface, Destiny 2, Battlefield (all series), Fortnite, The Finals, CS2 and more.
