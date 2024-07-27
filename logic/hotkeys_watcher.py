@@ -9,12 +9,13 @@ from logic.buttons import Buttons
 from logic.capture import capture
 from logic.mouse import mouse
 from logic.visual import visuals
-        
-class HotkeysWather(threading.Thread):
+from logic.shooting import shooting
+
+class HotkeysWatсher(threading.Thread):
     def __init__(self):
-        super(HotkeysWather, self).__init__()
+        super(HotkeysWatсher, self).__init__()
         self.daemon = True
-        self.name = 'HotkeysWather'
+        self.name = 'HotkeysWatсher'
         
         self.app_pause = 0
         self.clss = self.active_classes()
@@ -41,7 +42,7 @@ class HotkeysWather(threading.Thread):
             if app_reload_cfg in (1, 0):
                 cfg.Read(verbose=True)
                 capture.restart()
-                mouse.Update_settings()
+                mouse.update_settings()
                 self.clss = self.active_classes()
                 if cfg.show_window == False:
                     cv2.destroyAllWindows()
@@ -50,14 +51,17 @@ class HotkeysWather(threading.Thread):
         return cfg_reload_prev_state
 
     def active_classes(self) -> List[int]:
-        clss = [0, 1]
+        clss = [0.0, 1.0]
         
         if cfg.hideout_targets:
-            clss.extend([5, 6])
+            clss.extend([5.0, 6.0])
 
         if not cfg.disable_headshot:
-            clss.append(7)
+            clss.append(7.0)
+            
+        if cfg.third_person:
+            clss.append(10.0)
         
-        return clss
+        self.clss = clss
     
-hotkeys_watcher = HotkeysWather()
+hotkeys_watcher = HotkeysWatсher()

@@ -1,11 +1,17 @@
 import cv2
 import bettercam
 from screeninfo import get_monitors
+import threading
+import queue
+
 from logic.config_watcher import cfg
 
-class Capture():
+class Capture(threading.Thread):
     def __init__(self):
-        self.Warnings()
+        super().__init__()
+        self.daemon = True
+        self.name = "Capture"
+        
         self.print_startup_messages()
         
         self._custom_region = []
@@ -19,43 +25,73 @@ class Capture():
         self.prev_detection_window_height = cfg.detection_window_height
         self.prev_bettercam_capture_fps = cfg.bettercam_capture_fps
         
+        self.frame_queue = queue.Queue(maxsize=1)
+        self.running = True
+        
         if cfg.Bettercam_capture:
-            self.bc = bettercam.create(device_idx=cfg.bettercam_monitor_id, output_idx=cfg.bettercam_gpu_id, output_color="BGR", max_buffer_len=64, region=self.Calculate_screen_offset())
-            if self.bc.is_capturing == False:
-                self.bc.start(region=self.Calculate_screen_offset(custom_region=[] if len(self._custom_region) <=0 else self._custom_region, x_offset=None if self._offset_x == None else self._offset_x, y_offset = None if self._offset_y == None else self._offset_y), target_fps=cfg.bettercam_capture_fps)
+            self.setup_bettercam()
+        elif cfg.Obs_capture:
+            self.setup_obs()
+            
+    def setup_bettercam(self):
+        self.bc = bettercam.create(device_idx=cfg.bettercam_monitor_id,
+                                   output_idx=cfg.bettercam_gpu_id,
+                                   output_color="BGR",
+                                   max_buffer_len=16,
+                                   region=self.Calculate_screen_offset())
+        if not self.bc.is_capturing:
+            self.bc.start(region=self.Calculate_screen_offset(custom_region=[] if len(self._custom_region) <=0 else self._custom_region,
+                                                              x_offset=None if self._offset_x == None else self._offset_x,
+                                                              y_offset = None if self._offset_y == None else self._offset_y),
+                          target_fps=cfg.bettercam_capture_fps)
+
+    def setup_obs(self):
+        if cfg.Obs_camera_id == 'auto':
+            camera_id = self.find_obs_virtual_camera()
+            if camera_id == -1:
+                print('OBS Virtual Camera not found')
+                exit(0)
+                
+        elif cfg.Obs_camera_id.isdigit:
+            camera_id = int(cfg.Obs_camera_id)
+            
+        self.obs_camera = cv2.VideoCapture(camera_id)
+        self.obs_camera.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.detection_window_width)
+        self.obs_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.detection_window_height)
+        self.obs_camera.set(cv2.CAP_PROP_FPS, cfg.Obs_capture_fps)
         
-        if cfg.Obs_capture:
-            if cfg.Obs_camera_id == 'auto':
-                camera_id = self.find_obs_virtual_camera()
-                if camera_id == -1:
-                    print('OBS Virtual Camera not found')
-                    exit(0)
-            elif cfg.Obs_camera_id.isdigit:
-                camera_id = int(cfg.Obs_camera_id)
-            self.obs_camera = cv2.VideoCapture(camera_id)
-            self.obs_camera.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.detection_window_width)
-            self.obs_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.detection_window_height)
-            self.obs_camera.set(cv2.CAP_PROP_FPS, cfg.Obs_capture_fps)
-        
-    def get_new_frame(self):
+    def run(self):
+        while self.running:
+            frame = self.capture_frame()
+            if frame is not None:
+                if self.frame_queue.full():
+                    self.frame_queue.get()
+                self.frame_queue.put(frame)
+            
+    def capture_frame(self):
         if cfg.Bettercam_capture:
             return self.bc.get_latest_frame()
-        
-        if cfg.Obs_capture:
+        elif cfg.Obs_capture:
             ret_val, img = self.obs_camera.read()
             if ret_val:
                 return img
             else:
-                print('OBS Virtual Camera not found')
-                exit(0)
+                print('Failed to capture frame from OBS Virtual Camera')
+                return None
+            
+    def get_new_frame(self):
+        try:
+            return self.frame_queue.get(timeout=1)
+        except queue.Empty:
+            return None
     
     def restart(self):
-        if cfg.Bettercam_capture and self.prev_detection_window_height != cfg.detection_window_height or cfg.Bettercam_capture and self.prev_detection_window_width != cfg.detection_window_width or cfg.Bettercam_capture and self.prev_bettercam_capture_fps != cfg.bettercam_capture_fps:
+        if cfg.Bettercam_capture and (self.prev_detection_window_height != cfg.detection_window_height or 
+                                      self.prev_detection_window_width != cfg.detection_window_width or 
+                                      self.prev_bettercam_capture_fps != cfg.bettercam_capture_fps):
             self.bc.stop()
             del self.bc
-            
-            self.bc = bettercam.create(device_idx=cfg.bettercam_monitor_id, output_idx=cfg.bettercam_gpu_id, output_color="BGR", max_buffer_len=64)
-            self.bc.start(self.Calculate_screen_offset(), target_fps=cfg.bettercam_capture_fps)
+            self.setup_bettercam()
 
             self.screen_x_center = cfg.detection_window_width / 2
             self.screen_y_center = cfg.detection_window_height / 2
@@ -114,45 +150,20 @@ class Capture():
         except:
             print('(version file is not found)')
 
-        print(f'Yolov8 Aimbot is started! (Version {version})\n\n',
+        print(f'Program initialized! (Version {version})\n\n',
                 'Hotkeys:\n',
                 f'[{cfg.hotkey_targeting}] - Aiming at the target\n',
                 f'[{cfg.hotkey_exit}] - EXIT\n',
                 f'[{cfg.hotkey_pause}] - PAUSE AIM\n',
                 f'[{cfg.hotkey_reload_config}] - Reload config\n')
-        
-    def Warnings(self):
-        # FATAL ERRORS
-        if cfg.Bettercam_capture == False and cfg.Obs_capture == False:
-            print('Use at least one image capture method.\nSet the value to `True` in the `bettercam_capture` option or in the `obs_capture` option.')
-            exit(0)
-        if cfg.Bettercam_capture and cfg.Obs_capture:
-            print('Only one capture method is possible.\nSet the value to `True` in the `bettercam_capture` option or in the `obs_capture` option.')
-            exit(0)
-        # WARNINGS
-        if '.pt' in cfg.AI_model_name:
-            print('WARNING: Export the model to `.engine` for better performance!')
-        if cfg.mouse_ghub == False and cfg.arduino_move == False and cfg.arduino_shoot == False:
-            print('WARNING: win32api is detected in some games.')
-        if cfg.mouse_ghub and cfg.arduino_move == False and cfg.arduino_shoot == False:
-            print('WARNING: ghub is detected in some games.')
-        if cfg.show_window:
-            print('WARNING: An open debug window can affect performance.')
-        if cfg.bettercam_capture_fps >= 120:
-            print('WARNING: A large number of frames per second can affect the behavior of automatic aiming. (Shaking).')
-        if cfg.detection_window_width >= 600:
-            print('WARNING: The object detector window is more than 600 pixels wide, and a large object detector window can have a bad effect on performance.')
-        if cfg.detection_window_height >= 600:
-            print('WARNING: The object detector window is more than 600 pixels in height, a large object detector window can have a bad effect on performance.')
-        if cfg.arduino_move == False:
-            print('WARNING: Using standard libraries for mouse moving such as `win32` or `Ghub driver` without bypassing, for example, how Arduino can speed up the account blocking process, use it at your own risk.')
-        if cfg.arduino_shoot == False and cfg.auto_shoot:
-            print('WARNING: Using standard libraries for mouse shooting such as `win32` or `Ghub driver` without bypassing, for example, how Arduino can speed up the account blocking process, use it at your own risk.')
-        if cfg.AI_conf <= 0.15:
-            print('WARNING: A small value of `AI_conf ` can lead to a large number of false positives.')
             
     def Quit(self):
+        self.running = False
         if cfg.Bettercam_capture and self.bc.is_capturing:
             self.bc.stop()
+        if cfg.Obs_capture:
+            self.obs_camera.release()
+        self.join()
             
 capture = Capture()
+capture.start()

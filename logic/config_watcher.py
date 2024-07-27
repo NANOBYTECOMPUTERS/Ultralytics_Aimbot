@@ -7,8 +7,14 @@ class Config():
         self.window_name = self.get_random_window_name()
         self.Read(verbose=False)
     
-    def Read(self, verbose=False, ):
-        self.config.read('./config.ini')
+    def Read(self, verbose=False):
+        try:
+            with open("config.ini", "r", encoding="utf-8",) as f:
+                self.config.read_file(f)
+        except FileNotFoundError:
+            print("Config file not found!")
+            quit()
+            
         # Detection window
         self.config_Detection_window = self.config['Detection window']
         self.detection_window_width = int(self.config_Detection_window['detection_window_width'])
@@ -29,6 +35,9 @@ class Config():
         self.body_y_offset = float(self.config_Aim['body_y_offset'])
         self.hideout_targets = self.config_Aim.getboolean('hideout_targets')
         self.disable_headshot = self.config_Aim.getboolean('disable_headshot')
+        self.disable_prediction = self.config_Aim.getboolean('disable_prediction')
+        self.prediction_interval = float(self.config_Aim['prediction_interval'])
+        self.third_person = self.config_Aim.getboolean('third_person')
         # Hotkeys
         self.config_Hotkeys_settings = self.config['Hotkeys']
         self.hotkey_targeting = str(self.config_Hotkeys_settings['hotkey_targeting'])
@@ -45,12 +54,12 @@ class Config():
         self.mouse_lock_target = self.config_Mouse.getboolean('mouse_lock_target')
         self.mouse_auto_aim = self.config_Mouse.getboolean('mouse_auto_aim')
         self.mouse_ghub = self.config_Mouse.getboolean('mouse_ghub')
-        
         # Shooting
         self.config_Shooting = self.config['Shooting']
         self.auto_shoot = self.config_Shooting.getboolean('auto_shoot')
         self.triggerbot = self.config_Shooting.getboolean('triggerbot')
         self.force_click = self.config_Shooting.getboolean('force_click')
+        self.bScope_multiplier = float(self.config_Shooting['bScope_multiplier'])
         # Arduino
         self.config_Arduino = self.config['Arduino']
         self.arduino_move = self.config_Arduino.getboolean('arduino_move')
@@ -66,7 +75,15 @@ class Config():
         self.AI_device = str(self.config_AI['AI_device'])
         self.AI_enable_AMD = self.config_AI.getboolean('AI_enable_AMD')
         self.AI_mouse_net = self.config_AI.getboolean('AI_mouse_net')
-        self.hard_lock = self.config_Mouse.getboolean('hard_lock')
+        # Overlay
+        self.config_overlay = self.config['overlay']
+        self.show_overlay = self.config_overlay.getboolean('show_overlay')
+        self.overlay_show_borders = self.config_overlay.getboolean('overlay_show_borders')
+        self.overlay_show_boxes = self.config_overlay.getboolean('overlay_show_boxes')
+        self.overlay_show_target_line = self.config_overlay.getboolean('overlay_show_target_line')
+        self.overlay_show_target_prediction_line = self.config_overlay.getboolean('overlay_show_target_prediction_line')
+        self.overlay_show_labels = self.config_overlay.getboolean('overlay_show_labels')
+        self.overlay_show_conf = self.config_overlay.getboolean('overlay_show_conf')
         # Debug window
         self.config_Debug_window = self.config['Debug window']
         self.show_window = self.config_Debug_window.getboolean('show_window')
@@ -77,6 +94,8 @@ class Config():
         self.show_conf = self.config_Debug_window.getboolean('show_conf')
         self.show_target_line = self.config_Debug_window.getboolean('show_target_line')
         self.show_target_prediction_line = self.config_Debug_window.getboolean('show_target_prediction_line')
+        self.show_bScope_box = self.config_Debug_window.getboolean('show_bScope_box')
+        self.show_history_points = self.config_Debug_window.getboolean('show_history_points')
         self.debug_window_always_on_top = self.config_Debug_window.getboolean('debug_window_always_on_top')
         self.spawn_window_pos_x = int(self.config_Debug_window['spawn_window_pos_x'])
         self.spawn_window_pos_y = int(self.config_Debug_window['spawn_window_pos_y'])
@@ -88,7 +107,7 @@ class Config():
             
     def get_random_window_name(self):
         try:
-            with open('window_names.txt', 'r') as file:
+            with open('window_names.txt', 'r', encoding="utf-8") as file:
                 window_names = file.read().splitlines()
             return random.choice(window_names) if window_names else 'Calculator'
         except FileNotFoundError:
