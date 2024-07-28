@@ -281,7 +281,7 @@ with HELPER:
             './docs/en/helper_en.md', './docs/en/install_guide_en.md', './docs/en/questions_en.md',
             './docs/ru/helper_ru.md', './docs/ru/install_guide_ru.md', './docs/ru/questions_ru.md',
             # models
-            './models/60.pt'
+            './models/9.pt'
         ]
 
         for temp_file in temp_aimbot_files:
@@ -410,8 +410,6 @@ with CONFIG:
         config.set('Capture Methods', 'bettercam_capture_fps', str(bettercam_capture_fps))
         config.set('Capture Methods', 'bettercam_monitor_id', str(bettercam_monitor_id))
         config.set('Capture Methods', 'bettercam_gpu_id', str(bettercam_gpu_id))
-
-
 
     # Aim
     st.header("Aim")
