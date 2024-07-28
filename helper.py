@@ -509,7 +509,7 @@ with CONFIG:
     AI_device = st.selectbox(label="AI device", options=devices, index=devices.index(config.get('AI', 'AI_device')))
     AI_enable_AMD = st.checkbox("AI enable AMD", value=config.getboolean('AI', 'AI_enable_AMD'))
     AI_mouse_net = st.checkbox("AI mouse net", value=config.getboolean('AI', 'AI_mouse_net'))
-    config.set('AI', 'AI_model_name', AI_model_name)
+    config.set('AI', 'AI_model_name', str(AI_model_name))
     config.set('AI', 'AI_model_image_size', str(AI_model_image_size))
     config.set('AI', 'AI_conf', str(AI_conf))
     config.set('AI', 'AI_device', AI_device)
