@@ -1,11 +1,13 @@
 import queue
 import threading
 import win32con, win32api
+import numpy as np
 
 from logic.config_watcher import cfg
 
 if cfg.arduino_move or cfg.arduino_shoot:
     from logic.arduino import arduino
+
     
 class Shooting(threading.Thread):
     def __init__(self):

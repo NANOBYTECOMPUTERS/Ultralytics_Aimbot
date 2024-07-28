@@ -25,11 +25,6 @@ class Config():
         self.bettercam_capture_fps = int(self.config_Bettercam_Capture['bettercam_capture_fps'])
         self.bettercam_monitor_id = int(self.config_Bettercam_Capture['bettercam_monitor_id'])
         self.bettercam_gpu_id = int(self.config_Bettercam_Capture['bettercam_gpu_id'])
-        # Capture Method Obs
-        self.config_Obs_capture = self.config['Capture Methods']
-        self.Obs_capture = self.config_Obs_capture.getboolean('Obs_capture')
-        self.Obs_camera_id = str(self.config_Obs_capture['Obs_camera_id'])
-        self.Obs_capture_fps = int(self.config_Obs_capture['Obs_capture_fps'])
         # Aim
         self.config_Aim = self.config['Aim']
         self.body_y_offset = float(self.config_Aim['body_y_offset'])

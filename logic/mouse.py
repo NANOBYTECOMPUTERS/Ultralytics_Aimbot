@@ -188,52 +188,39 @@ class MouseThread:
         if cfg.AI_mouse_net == False:
             if (cfg.show_window and cfg.show_target_line) or (cfg.show_overlay and cfg.show_target_line):
                 visuals.draw_target_line(target_x, target_y, target_cls)
-        
+
+        # Check bScope with original target coordinates
         self.bScope = self.check_target_in_scope(target_x, target_y, target_w, target_h, self.bScope_multiplier) if cfg.auto_shoot or cfg.triggerbot else False
         self.bScope = cfg.force_click or self.bScope
 
         if not self.disable_prediction:
-                current_time = time.time()
-                target_x, target_y = self.predict_target_position(
-                    target_x, target_y, target_w, target_h, current_time
-        )
+            current_time = time.time()
 
-        target_x, target_y = self.calc_movement(
-            target_center_x, target_center_y, target_w, target_h, target_cls
-        )
+            # Prediction and update using NumPy
+            measurement = np.array([target_x, target_y, target_w, target_h])
+            if self.mean is None or self.covariance is None:
+                self.mean, self.covariance = self.kalman_filter.initiate(measurement)
+            self.mean, self.covariance = self.kalman_filter.predict(self.mean, self.covariance)
+            self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, measurement)
+
+            predicted_x, predicted_y = self.mean[:2]
+        else:
+            predicted_x, predicted_y = target_center_x, target_center_y # if prediction is disabled use the current target_center
+        
+        # Calculate movement for both original and predicted positions
+        move_x_raw, move_y_raw = self.calc_movement(target_center_x, target_center_y, target_w, target_h, target_cls)  
+        move_x, move_y = self.calc_movement(predicted_x, predicted_y, target_w, target_h, target_cls) 
 
         if (cfg.show_window and cfg.show_history_points) or (cfg.show_overlay and cfg.show_history_points):
-            visuals.draw_history_point_add_point(target_x, target_y)
-        
+            visuals.draw_history_point_add_point(move_x_raw, move_y_raw)  # Show original position in history
+            
+        if (cfg.show_window and cfg.show_target_prediction_line) or (cfg.show_overlay and cfg.show_target_prediction_line):
+            visuals.draw_predicted_position(predicted_x, predicted_y, target_cls) # Show prediction if enabled
+
         shooting.queue.put((self.bScope, self.get_shooting_key_state()))
-
-        self.move_mouse(target_x, target_y)
-
-
-    def predict_target_position(self, target_x, target_y, target_w, target_h, current_time):
-        if self.prev_time is None:
-            self.prev_time = current_time
-            self.prev_x = target_x
-            self.prev_y = target_y
-            self.mean, self.covariance = self.kalman_filter.initiate([target_x, target_y, target_w, target_h])
-            return target_x, target_y
-
-        time_diff = current_time - self.prev_time
-        steps = max(1, int(time_diff / self.prediction_interval))
-        for _ in range(steps):
-            self.mean, self.covariance = self.kalman_filter.predict(self.mean, self.covariance)
-
-        predicted_x, predicted_y = self.mean[:2]
-
-        self.mean, self.covariance = self.kalman_filter.update(
-            self.mean, self.covariance, [target_x, target_y, target_w, target_h]
-        )
-        self.prev_time = current_time
-
-        return predicted_x, predicted_y
+        self.move_mouse(move_x, move_y)  # Move based on the predicted position
     
     def calc_movement(self, target_x, target_y, target_w, target_h, target_cls):
-
         measurement = np.array([target_x, target_y, target_w, target_h])
         if self.mean is None or self.covariance is None:
             self.mean, self.covariance = self.kalman_filter.initiate(measurement)
@@ -242,12 +229,25 @@ class MouseThread:
         smoothed_measurement = self.kalman_filter.update(self.mean, self.covariance, measurement)[0]
         self.mean[:2] = smoothed_measurement[:2]
 
-        target_x, target_y = smoothed_measurement[:2]
+        target_x, target_y = smoothed_measurement[:2]  
 
         if not cfg.AI_mouse_net:
             offset_x = target_x - self.center_x
             offset_y = target_y - self.center_y
-            
+
+            # Calculate target velocity based on Kalman filter
+            target_vel_x = self.mean[4] # velocity x from kalman_filter
+            target_vel_y = self.mean[5] # velocity y from kalman_filter
+
+            # Predict future position of the target
+            predicted_target_x = target_x + target_vel_x * cfg.prediction_interval  # cfg.prediction_interval is in seconds
+            predicted_target_y = target_y + target_vel_y * cfg.prediction_interval
+
+            # Adjust offset to lead the target
+            offset_x = predicted_target_x - self.center_x
+            offset_y = predicted_target_y - self.center_y
+
+
             degrees_per_pixel_x = self.fov_x / self.screen_width
             degrees_per_pixel_y = self.fov_y / self.screen_height
 
@@ -256,7 +256,7 @@ class MouseThread:
 
             mouse_move_y = offset_y * degrees_per_pixel_y
             move_y = (mouse_move_y / 360) * (self.dpi * (1 / self.mouse_sensitivity))
-            
+
             return move_x, move_y
         else:
             input_data = [
@@ -272,32 +272,25 @@ class MouseThread:
                 target_y
             ]
             
-            input_tensor = torch.tensor(input_data, dtype=torch.float32).to(self.device)
-            with torch.no_grad():
-                move = self.model(input_tensor).cpu().numpy()
-                
-            if (cfg.show_window and cfg.show_target_prediction_line) or (cfg.show_overlay and cfg.show_target_prediction_line):
-                    visuals.draw_predicted_position(move[0] + self.center_x, move[1] + self.center_y, target_cls)
-                    
-            return move[0], move[1]
+        input_data = torch.tensor([self.screen_width, self.screen_height, target_x, target_y, target_w, target_h], 
+                                  dtype=torch.float32).to(self.device)
+        with torch.no_grad():
+            move_x, move_y = self.model(input_data).cpu().numpy()
+        return move_x, move_y
 
         
     def move_mouse(self, x, y):
-        if x is None:
-            x = 0
-        if y is None:
-            y = 0
-        
-        if x != 0 and y != 0:
-            if (self.get_shooting_key_state() and not cfg.mouse_auto_aim and not cfg.triggerbot) or cfg.mouse_auto_aim:
-                if not cfg.mouse_ghub and x is not None and y is not None and not cfg.arduino_move:
-                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, int(x), int(y), 0, 0)
-                    
-                if cfg.mouse_ghub and x is not None and y is not None and not cfg.arduino_move:
-                    self.ghub.mouse_xy(int(x), int(y))
+        if x is not None and y is not None:  # Combined None checks
+            is_shooting = self.get_shooting_key_state()
+            if (is_shooting and not cfg.mouse_auto_aim and not cfg.triggerbot) or cfg.mouse_auto_aim:
+                x, y = int(x), int(y)  # Convert to integers once
 
-                if cfg.arduino_move and x is not None and y is not None:    
-                    arduino.move(int(x), int(y))
+                if not cfg.mouse_ghub and not cfg.arduino_move:  # Native
+                    win32api.mouse_event(win32con.MOUSEEVENTF_MOVE, x, y, 0, 0)
+                elif cfg.mouse_ghub:  # GHub
+                    self.ghub.mouse_xy(x, y)
+                elif cfg.arduino_move:  # Arduino
+                    arduino.move(x, y)
     
     def get_shooting_key_state(self):
         for key_name in cfg.hotkey_targeting_list:
@@ -309,20 +302,13 @@ class MouseThread:
         return False
       
     def check_target_in_scope(self, target_x, target_y, target_w, target_h, reduction_factor):
-        reduced_w = target_w * reduction_factor / 2
-        reduced_h = target_h * reduction_factor / 2
+        # Optimized calculations using NumPy:
+        center = np.array([self.center_x, self.center_y])
+        target_center = np.array([target_x + target_w / 2, target_y + target_h / 2])
+        target_size = np.array([target_w * reduction_factor / 2, target_h * reduction_factor / 2])
 
-        x1 = target_x - reduced_w
-        x2 = target_x + reduced_w
-        y1 = target_y - reduced_h
-        y2 = target_y + reduced_h
+        self.bScope = np.all(np.abs(target_center - center) < target_size)
 
-        bScope = self.center_x > x1 and self.center_x < x2 and self.center_y > y1 and self.center_y < y2
-            
-        if cfg.show_window and cfg.show_bScope_box:
-            visuals.draw_bScope(x1, x2, y1, y2, bScope)
-        
-        return bScope
 
     def update_settings(self):
         self.dpi = cfg.mouse_dpi

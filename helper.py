@@ -69,7 +69,7 @@ def get_aimbot_offline_version():
             return 0, 0
 
 def get_aimbot_online_version():
-    content = requests.get('https://raw.githubusercontent.com/NANOBYTECOMPUTERS/Yolov10/main/version').content.decode('utf-8').split('\n')
+    content = requests.get('https://raw.githubusercontent.com/NANOBYTECOMPUTERS/Ultralytics_Aimbot/main/version').content.decode('utf-8').split('\n')
     app, config = 0, 0
     app, config = 0, 0
     for line in content:
@@ -248,7 +248,7 @@ with HELPER:
                 pass
             replace_config = True
         else:
-            log_text.text("Config has a fresh version. We don't touch him.")
+            log_text.text("Config is directly editable.")
             
         try:
             os.remove("./version")
@@ -256,7 +256,7 @@ with HELPER:
             pass
         
         log_text.text("Downloading repo. Please wait...")
-        download_file("https://github.com/NANOBYTECOMPUTERS/Yolov10_Aimbot/archive/refs/heads/main.zip", "main.zip")
+        download_file("https://github.com/NANOBYTECOMPUTERS/Ultralytics_Aimbot/archive/refs/heads/main.zip", "main.zip")
         log_text.text("Unpacking...")
         with zipfile.ZipFile(r"./main.zip", "r") as zip_ref:
             zip_ref.extractall("./")
@@ -286,15 +286,15 @@ with HELPER:
 
         for temp_file in temp_aimbot_files:
             try:
-                if temp_file == "./Yolov10_Aimbot-main/config.ini" and not replace_config:
+                if temp_file == "./Ultralytics_Aimbot-main/config.ini" and not replace_config:
                     continue
-                shutil.move(f"Yolov10_Aimbot-main/{temp_file}", temp_file)
+                shutil.move(f"Ultralytics_Aimbot-main/{temp_file}", temp_file)
             except:
                 pass
 
         try:
-            delete_files_in_folder("./Yolov10_Aimbot-main")
-            os.rmdir("./Yolov10_Aimbot-main")
+            delete_files_in_folder("./Ultralytics_Aimbot-main")
+            os.rmdir("./Ultralytics_Aimbot-main")
         except:
             pass
 
@@ -308,7 +308,7 @@ with HELPER:
         reinstall_aimbot()
 
     # Buttons
-    if st.button("Update/Install Yolov10_Aimbot", key="reinstall_aimbot_button"):
+    if st.button("Update/Install Ultralytics_Aimbot", key="reinstall_aimbot_button"):
         st.text("Are you sure?")
         if st.button("Yes", key="reinstall_aimbot_button_yes"):
             reinstall_aimbot()
@@ -401,24 +401,17 @@ with CONFIG:
 
     # Capture Methods
     st.header("Capture Methods")
-    selected_capture_method = st.radio(label="Capture Method", options=["Bettercam capture", "OBS"])
-    
-    if selected_capture_method == "Bettercam capture":        
+    selected_capture_method = st.radio(label="Capture Method", options=["Bettercam capture"])
+    if selected_capture_method == "Bettercam capture":
         bettercam_capture_fps = st.number_input("Bettercam capture FPS", value=config.getint('Capture Methods', 'bettercam_capture_fps'))
         bettercam_monitor_id = st.number_input("Bettercam monitor ID", value=config.getint('Capture Methods', 'bettercam_monitor_id'))
         bettercam_gpu_id = st.number_input("Bettercam GPU ID", value=config.getint('Capture Methods', 'bettercam_gpu_id'))
         config.set('Capture Methods', 'Bettercam_capture', "True")
-        config.set('Capture Methods', 'Obs_capture', "False")
         config.set('Capture Methods', 'bettercam_capture_fps', str(bettercam_capture_fps))
         config.set('Capture Methods', 'bettercam_monitor_id', str(bettercam_monitor_id))
         config.set('Capture Methods', 'bettercam_gpu_id', str(bettercam_gpu_id))
-    else:
-        obs_camera_id = st.selectbox(label="Obs camera ID", options=["auto", "0","1","2","3","4","5","6","7","8","9","10"], index=0)
-        obs_capture_fps = st.number_input("Obs capture FPS", value=config.getint('Capture Methods', 'Obs_capture_fps'))
-        config.set('Capture Methods', 'Bettercam_capture', "False")
-        config.set('Capture Methods', 'Obs_capture', "True")
-        config.set('Capture Methods', 'Obs_camera_id', obs_camera_id)
-        config.set('Capture Methods', 'Obs_capture_fps', str(obs_capture_fps))
+
+
 
     # Aim
     st.header("Aim")

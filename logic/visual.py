@@ -4,6 +4,7 @@ import time
 import cv2
 import torch
 import win32gui, win32con
+import numpy as np
 
 from logic.config_watcher import cfg
 from logic.capture import capture
@@ -12,17 +13,18 @@ from logic.overlay import overlay
 class Visuals(threading.Thread):
     def __init__(self):
         overlay.show(cfg.detection_window_width, cfg.detection_window_height)
-        
+
         if cfg.show_window or cfg.show_overlay:
-            super(Visuals, self).__init__()
+            super().__init__()  # Use super() without arguments for better compatibility
             self.queue = queue.Queue(maxsize=1)
             self.daemon = True
             self.name = 'Visuals'
             self.image = None
-            
+
             if cfg.show_window:
                 self.interpolation = cv2.INTER_NEAREST
-            
+
+            # Initialize drawing data with None to avoid AttributeError
             self.draw_line_data = None
             self.draw_predicted_position_data = None
             self.draw_boxes_data = None
@@ -46,66 +48,65 @@ class Visuals(threading.Thread):
             self.disabled_line_classes = [2, 3, 4, 8, 9, 10]
             self.start()
     
+        else:
+            return None #if not showing window or overlay dont create instance
+
+
     def run(self):
         if cfg.show_window:
             self.spawn_debug_window()
             prev_frame_time, new_frame_time = 0, 0 if cfg.show_window_fps else None
-            
+
         while True:
             self.image = self.queue.get()
-            
             if self.image is None:
                 self.destroy()
                 break
-            
-            # simple line
-            if self.draw_line_data:
-                if cfg.show_window and cfg.show_target_line:
-                    cv2.line(self.image, (capture.screen_x_center, capture.screen_y_center), (int(self.draw_line_data[0]), int(self.draw_line_data[1])), (0, 255, 255), 2)
-                
-                if cfg.show_overlay and cfg.overlay_show_target_line:
-                    overlay.draw_line(capture.screen_x_center, capture.screen_y_center, int(self.draw_line_data[0]), int(self.draw_line_data[1]), 'green', 2)
+        
+            # Work directly with the NumPy array
+            image_np = self.image 
 
-            # boxes
-            if self.draw_boxes_data: 
+            # Simple Line (using NumPy slicing)
+            if self.draw_line_data:
+                x1, y1 = capture.screen_x_center, capture.screen_y_center
+                x2, y2 = map(int, self.draw_line_data)
+                if cfg.show_window and cfg.show_target_line:
+                    cv2.line(image_np, (x1, y1), (x2, y2), (0, 255, 255), 2)
+                if cfg.show_overlay and cfg.overlay_show_target_line:
+                    overlay.draw_line(x1, y1, x2, y2, 'green', 2)
+
+            # Boxes (using NumPy slicing)
+            if self.draw_boxes_data:
                 for item in self.draw_boxes_data:
                     if item:
                         for xyxy, cls, conf in zip(item.xyxy, item.cls, item.conf):
                             x0, y0, x1, y1 = map(int, map(torch.Tensor.item, xyxy))
                             
-                            if cfg.show_window and cfg.show_boxes:
-                                cv2.rectangle(self.image, (x0, y0), (x1, y1), (0, 200, 0), 2)
-                                
-                            if cfg.show_overlay and cfg.overlay_show_boxes:
-                                overlay.draw_square(x0, y0, x1, y1, 'green', 2)
-                                
-                            # cv2 and overlay labels and conf
-                            str_cls = self.cls_model_data.get(cls.item(), '')
-                            
-                            # cv2 labels
-                            if cfg.show_window and cfg.show_labels and not cfg.show_conf:
-                                cv2.putText(self.image, str_cls, (x0, y0 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 1, cv2.LINE_AA)
-                            
-                            # overlay labels
-                            if cfg.show_overlay and cfg.overlay_show_labels and not cfg.overlay_show_conf:
-                                overlay.draw_text(x0 + 30, y0 + 7, str_cls)
-                            
-                            # cv2 conf
-                            conf_text = '{} {:.2f}'.format(str_cls, conf.item())
-                            
-                            if cfg.show_window and cfg.show_conf:
-                                cv2.putText(self.image, conf_text, (x0, y0 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 1, cv2.LINE_AA)
+                            # Draw rectangle with NumPy slicing
+                            image_np[y0:y1, x0:x1] = (0, 200, 0)  # Green color
 
-                            # overlay conf
-                            if cfg.show_overlay and cfg.overlay_show_conf:
+                            str_cls = self.cls_model_data.get(cls.item(), '')
+
+                            # Text labels (only draw once)
+                            if cfg.show_window and cfg.show_labels and not cfg.show_conf:
+                                cv2.putText(image_np, str_cls, (x0, y0 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 1, cv2.LINE_AA)
+                            elif cfg.show_overlay and cfg.overlay_show_labels and not cfg.overlay_show_conf:
+                                overlay.draw_text(x0 + 30, y0 + 7, str_cls)
+
+                            # Confidence labels (only draw once)
+                            if cfg.show_window and cfg.show_conf:
+                                conf_text = '{} {:.2f}'.format(str_cls, conf.item())
+                                cv2.putText(image_np, conf_text, (x0, y0 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 1, cv2.LINE_AA)
+                            elif cfg.show_overlay and cfg.overlay_show_conf:
                                 overlay.draw_text(x0 + 45, y0 + 7, conf_text)
+
             
             # speed
             if self.draw_speed_data:
                 if cfg.show_window:
-                    cv2.putText(self.image, 'preprocess: {:.2f}'.format(self.draw_speed_data[0]), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1, cv2.LINE_AA)
+                    cv2.putText(self.image, 'pre-process: {:.2f}'.format(self.draw_speed_data[0]), (10, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1, cv2.LINE_AA)
                     cv2.putText(self.image, 'inference: {:.2f}'.format(self.draw_speed_data[1]), (10, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1, cv2.LINE_AA)
-                    cv2.putText(self.image, 'postprocess: {:.2f}'.format(self.draw_speed_data[2]), (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1, cv2.LINE_AA)
+                    cv2.putText(self.image, 'post-process: {:.2f}'.format(self.draw_speed_data[2]), (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1, cv2.LINE_AA)
             
             # fps
             if cfg.show_window_fps:
@@ -147,21 +148,21 @@ class Visuals(threading.Thread):
                     
             # debug window: resize
             if cfg.show_window:
-                try:
-                    if cfg.debug_window_scale_percent != 100:
-                        height = int(cfg.detection_window_height * cfg.debug_window_scale_percent / 100)
-                        width = int(cfg.detection_window_width * cfg.debug_window_scale_percent / 100)
-                        dim = (width, height)
-                        cv2.resizeWindow(cfg.debug_window_name, dim)
-                        resised = cv2.resize(self.image, dim, self.interpolation)
-                        cv2.imshow(cfg.debug_window_name, resised)
-                    else:
-                        cv2.imshow(cfg.debug_window_name, self.image)
-                except:
-                    exit(0)
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
-                
+                    try:
+                        if cfg.debug_window_scale_percent != 100:
+                            height = int(cfg.detection_window_height * cfg.debug_window_scale_percent / 100)
+                            width = int(cfg.detection_window_width * cfg.debug_window_scale_percent / 100)
+                            dim = (width, height)
+                            cv2.resizeWindow(cfg.debug_window_name, dim)
+                            resized = cv2.resize(image_np, dim, self.interpolation) # Use image_np
+                            cv2.imshow(cfg.debug_window_name, resized)
+                        else:
+                            cv2.imshow(cfg.debug_window_name, image_np) # Use image_np
+                    except:
+                        exit(0)
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        break
+            
     def spawn_debug_window(self):
         cv2.namedWindow(cfg.debug_window_name)
         if cfg.debug_window_always_on_top:

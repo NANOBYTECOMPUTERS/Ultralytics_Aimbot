@@ -5,23 +5,23 @@ def Warnings():
         if '.pt' in cfg.AI_model_name:
             print("WARNING: Export the model to `.engine` for better performance!\nHOW TO EXPORT TO ENGINE DOCS: 'https://github.com/SunOner/sunone_aimbot?tab=readme-ov-file#export-pt-model-to-engine'")
         if cfg.mouse_ghub == False and cfg.arduino_move == False and cfg.arduino_shoot == False:
-            print('WARNING: win32api is detected in some games.')
+            print('WARNING: Eye Tracker is using win32api some games may detect this as a cheat or somthing.')
         if cfg.mouse_ghub and cfg.arduino_move == False and cfg.arduino_shoot == False:
-            print('WARNING: ghub is detected in some games.')
+            print('WARNING: ghub driver may be taken as a cheat in some games.')
         if cfg.show_window:
-            print('WARNING: An open debug window can affect performance.')
+            print('WARNING: Watching your Eye Capture can cause performance issues.')
         if cfg.bettercam_capture_fps >= 120:
-            print('WARNING: A large number of frames per second can affect the behavior of automatic aiming. (Shaking).')
+            print('WARNING: A large number of frames per second can affect performance. (Shaking).')
         if cfg.detection_window_width >= 600:
-            print('WARNING: The object detector window is more than 600 pixels wide, and a large object detector window can have a bad effect on performance.')
+            print('WARNING: The detector window is more than 600 pixels wide, and a large object detector window can have a bad effect on performance.')
         if cfg.detection_window_height >= 600:
-            print('WARNING: The object detector window is more than 600 pixels in height, a large object detector window can have a bad effect on performance.')
+            print('WARNING: The  detector window is more than 600 pixels in height, a large object detector window can have a bad effect on performance.')
         if cfg.arduino_move == False:
-            print('WARNING: Using standard libraries for mouse moving such as `win32` or `Ghub driver` without bypassing, for example, how Arduino can speed up the account blocking process, use it at your own risk.')
+            print('WARNING: Using standard libraries for mouse moving such as `win32` can be mistaken for cheats, use it at your own risk.')
         if cfg.arduino_shoot == False and cfg.auto_shoot:
-            print('WARNING: Using standard libraries for mouse shooting such as `win32` or `Ghub driver` without bypassing, for example, how Arduino can speed up the account blocking process, use it at your own risk.')
+            print('WARNING: Eye tracker clicking mouse with libraries like `win32` may be mistaken as a cheat, use it at your own risk.')
         if cfg.AI_conf <= 0.15:
-            print('WARNING: A small value of `AI_conf ` can lead to a large number of false positives.')
+            print('WARNING: A small value of `conf ` can cause eye detector to behave irradically.')
             
 def run_checks():
     if torch.cuda.is_available() is False:
@@ -32,12 +32,8 @@ def run_checks():
             "Don't forget your CUDA version (Minimum version is 12.1, max version is 12.4).")
         quit()
         
-    if cfg.Bettercam_capture == False and cfg.Obs_capture == False:
-        print('Use at least one image capture method.\nSet the value to `True` in the `bettercam_capture` option or in the `obs_capture` option.')
-        quit()
-        
-    if cfg.Bettercam_capture and cfg.Obs_capture:
-        print('Only one capture method is possible.\nSet the value to `True` in the `bettercam_capture` option or in the `obs_capture` option.')
+    if cfg.Bettercam_capture == False:
+        print('Use a capture method.\nSet the value to `True` in the `bettercam_capture` option.')
         quit()
 
     Warnings()

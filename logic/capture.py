@@ -11,7 +11,7 @@ class Capture(threading.Thread):
         super().__init__()
         self.daemon = True
         self.name = "Capture"
-        
+
         self.print_startup_messages()
         
         self._custom_region = []
@@ -44,21 +44,6 @@ class Capture(threading.Thread):
                                                               x_offset=None if self._offset_x == None else self._offset_x,
                                                               y_offset = None if self._offset_y == None else self._offset_y),
                           target_fps=cfg.bettercam_capture_fps)
-
-    def setup_obs(self):
-        if cfg.Obs_camera_id == 'auto':
-            camera_id = self.find_obs_virtual_camera()
-            if camera_id == -1:
-                print('OBS Virtual Camera not found')
-                exit(0)
-                
-        elif cfg.Obs_camera_id.isdigit:
-            camera_id = int(cfg.Obs_camera_id)
-            
-        self.obs_camera = cv2.VideoCapture(camera_id)
-        self.obs_camera.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.detection_window_width)
-        self.obs_camera.set(cv2.CAP_PROP_FRAME_HEIGHT, cfg.detection_window_height)
-        self.obs_camera.set(cv2.CAP_PROP_FPS, cfg.Obs_capture_fps)
         
     def run(self):
         while self.running:
@@ -71,13 +56,7 @@ class Capture(threading.Thread):
     def capture_frame(self):
         if cfg.Bettercam_capture:
             return self.bc.get_latest_frame()
-        elif cfg.Obs_capture:
-            ret_val, img = self.obs_camera.read()
-            if ret_val:
-                return img
-            else:
-                print('Failed to capture frame from OBS Virtual Camera')
-                return None
+ 
             
     def get_new_frame(self):
         try:
@@ -125,21 +104,6 @@ class Capture(threading.Thread):
             if m.is_primary:
                 return m.width, m.height
             
-    def find_obs_virtual_camera(self):
-        max_tested = 20
-        obs_camera_name = 'DSHOW'
-        
-        for i in range(max_tested):
-            cap = cv2.VideoCapture(i, cv2.CAP_DSHOW)
-            if not cap.isOpened():
-                continue
-            backend_name = cap.getBackendName()
-            if backend_name == obs_camera_name:
-                print(f'OBS Virtual Camera found at index {i}')
-                cap.release()
-                return i
-            cap.release()
-        return -1
     
     def print_startup_messages(self):
         version = 0
@@ -152,17 +116,16 @@ class Capture(threading.Thread):
 
         print(f'Program initialized! (Version {version})\n\n',
                 'Hotkeys:\n',
-                f'[{cfg.hotkey_targeting}] - Aiming at the target\n',
+                f'[{cfg.hotkey_targeting}] - Aim\n',
                 f'[{cfg.hotkey_exit}] - EXIT\n',
                 f'[{cfg.hotkey_pause}] - PAUSE AIM\n',
-                f'[{cfg.hotkey_reload_config}] - Reload config\n')
+                f'[{cfg.hotkey_reload_config}] - Reload n')
             
     def Quit(self):
         self.running = False
         if cfg.Bettercam_capture and self.bc.is_capturing:
             self.bc.stop()
-        if cfg.Obs_capture:
-            self.obs_camera.release()
+
         self.join()
             
 capture = Capture()
