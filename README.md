@@ -1,7 +1,7 @@
 <div align="center">
 
-# Ultralytics Aimbot was inspired and startedfrom Sunone Project
-Due to the large differences in code as well as mine consistantly changing it is branched to its own repository soon
+# Yolov10_Aimbot was developed from Sunones Project
+Due to the large differences in features and functions as well as mine consistantly changing it is branching to its own repository soon
 
 [![Python Version](https://img.shields.io/badge/Python-3.11.6-FFD43B?logo=python)]
 

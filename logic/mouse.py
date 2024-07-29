@@ -180,6 +180,7 @@ class MouseThread:
             return 'cpu'
         return f'cuda:{cfg.AI_device}'
 
+
     def process_data(self, data):
         target_x, target_y, target_w, target_h, target_cls = data
         target_center_x = target_x + (target_w / 2)
@@ -219,17 +220,26 @@ class MouseThread:
 
         shooting.queue.put((self.bScope, self.get_shooting_key_state()))
         self.move_mouse(move_x, move_y)  # Move based on the predicted position
+
     
     def calc_movement(self, target_x, target_y, target_w, target_h, target_cls):
-        measurement = np.array([target_x, target_y, target_w, target_h])
+        measurement = np.array([target_x, target_y, target_w, target_h])  # Define measurement here
         if self.mean is None or self.covariance is None:
             self.mean, self.covariance = self.kalman_filter.initiate(measurement)
 
         self.mean, self.covariance = self.kalman_filter.predict(self.mean, self.covariance)
-        smoothed_measurement = self.kalman_filter.update(self.mean, self.covariance, measurement)[0]
-        self.mean[:2] = smoothed_measurement[:2]
 
-        target_x, target_y = smoothed_measurement[:2]  
+        # Adaptive Prediction Interval
+        target_speed = np.linalg.norm(self.mean[4:6])  # Calculate target speed
+        prediction_interval = max(cfg.prediction_interval, target_speed * 0.1)  # Adjust interval based on speed
+
+        # Smooth the Measurement and Predict
+        smoothed_measurement = self.kalman_filter.update(self.mean, self.covariance, measurement)[0]
+        self.mean[:2] = smoothed_measurement[:2]  # Smooth the position
+
+        predicted_target_x = target_x + self.mean[4] * prediction_interval  
+        predicted_target_y = target_y + self.mean[5] * prediction_interval
+
 
         if not cfg.AI_mouse_net:
             offset_x = target_x - self.center_x
@@ -247,6 +257,10 @@ class MouseThread:
             offset_x = predicted_target_x - self.center_x
             offset_y = predicted_target_y - self.center_y
 
+            alpha = 0.9  # Smoothing factor (adjust as needed)
+            self.prev_x = alpha * self.center_x + (1 - alpha) * self.prev_x
+            self.prev_y = alpha * self.center_y + (1 - alpha) * self.prev_y
+
 
             degrees_per_pixel_x = self.fov_x / self.screen_width
             degrees_per_pixel_y = self.fov_y / self.screen_height
@@ -256,7 +270,6 @@ class MouseThread:
 
             mouse_move_y = offset_y * degrees_per_pixel_y
             move_y = (mouse_move_y / 360) * (self.dpi * (1 / self.mouse_sensitivity))
-
             return move_x, move_y
         else:
             input_data = [
@@ -309,7 +322,46 @@ class MouseThread:
 
         self.bScope = np.all(np.abs(target_center - center) < target_size)
 
+    def process_mouse_input(self, mouse_x, mouse_y, data,  is_raw_input=False):
+        target_x, target_y, target_w, target_h, target_cls = data
+        self.process_data((target_x, target_y, target_w, target_h, target_cls))
+        
 
+        if is_raw_input and cfg.mouse_capture_and_retransmit:
+            # Adjust raw mouse input based on DPI and sensitivity (optional)
+            move_x = mouse_x * (self.dpi / self.mouse_sensitivity)
+            move_y = mouse_y * (self.dpi / self.mouse_sensitivity)
+
+            # Combine with existing aimbot movement if not disabled
+            if not self.disable_prediction:
+                if self.mean is not None:
+                    predicted_x, predicted_y = self.mean[:2]
+                    # Smooth raw input with predicted position using numpy for efficiency
+                    smoothing_factor = 0.8  # Adjust this value for desired smoothness
+                    move_x = smoothing_factor * predicted_x + (1 - smoothing_factor) * move_x
+                    move_y = smoothing_factor * predicted_y + (1 - smoothing_factor) * move_y
+
+            # Output the final (combined or raw) mouse movement
+            self.move_mouse(move_x, move_y)
+
+        # Process other mouse events (e.g., button clicks, from your existing logic) or aimbot movements if not raw input
+        elif not is_raw_input:  
+            self.process_data((mouse_x, mouse_y)) 
+            
+            # Use the updated self.mean from process_data to calculate the new coordinates
+            predicted_x, predicted_y = self.mean[:2]  
+
+            # Calculate and output mouse movements
+            move_x, move_y = self.calc_movement(predicted_x, predicted_y, target_w, target_h, target_cls)
+
+            if (cfg.show_window and cfg.show_history_points) or (cfg.show_overlay and cfg.show_history_points):
+                visuals.draw_history_point_add_point(move_x, move_y)  # Show original position in history
+                
+            if (cfg.show_window and cfg.show_target_prediction_line) or (cfg.show_overlay and cfg.show_target_prediction_line):
+                visuals.draw_predicted_position(predicted_x, predicted_y, target_cls)  # Show prediction if enabled
+
+            shooting.queue.put((self.bScope, self.get_shooting_key_state()))
+            self.move_mouse(move_x, move_y) 
     def update_settings(self):
         self.dpi = cfg.mouse_dpi
         self.mouse_sensitivity = cfg.mouse_sensitivity

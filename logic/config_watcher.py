@@ -49,6 +49,7 @@ class Config():
         self.mouse_lock_target = self.config_Mouse.getboolean('mouse_lock_target')
         self.mouse_auto_aim = self.config_Mouse.getboolean('mouse_auto_aim')
         self.mouse_ghub = self.config_Mouse.getboolean('mouse_ghub')
+        self.mouse_capture_and_retransmit = self.config_Mouse.getboolean('mouse_capture_and_retransmit')
         # Shooting
         self.config_Shooting = self.config['Shooting']
         self.auto_shoot = self.config_Shooting.getboolean('auto_shoot')

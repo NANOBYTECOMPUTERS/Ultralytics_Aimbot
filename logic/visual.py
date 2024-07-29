@@ -75,30 +75,32 @@ class Visuals(threading.Thread):
                 if cfg.show_overlay and cfg.overlay_show_target_line:
                     overlay.draw_line(x1, y1, x2, y2, 'green', 2)
 
-            # Boxes (using NumPy slicing)
-            if self.draw_boxes_data:
-                for item in self.draw_boxes_data:
-                    if item:
-                        for xyxy, cls, conf in zip(item.xyxy, item.cls, item.conf):
-                            x0, y0, x1, y1 = map(int, map(torch.Tensor.item, xyxy))
-                            
-                            # Draw rectangle with NumPy slicing
-                            image_np[y0:y1, x0:x1] = (0, 200, 0)  # Green color
+                if self.draw_boxes_data:
+                    for item in self.draw_boxes_data:
+                        if item:
+                            for xyxy, cls, conf in zip(item.xyxy, item.cls, item.conf):
+                                x0, y0, x1, y1 = map(int, map(torch.Tensor.item, xyxy))
 
-                            str_cls = self.cls_model_data.get(cls.item(), '')
+                                # Send box coordinates and color to overlay
+                                overlay.draw_square(x0, y0, x1, y1, "green", 2)  # Draw frame box with outline
 
-                            # Text labels (only draw once)
-                            if cfg.show_window and cfg.show_labels and not cfg.show_conf:
-                                cv2.putText(image_np, str_cls, (x0, y0 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 1, cv2.LINE_AA)
-                            elif cfg.show_overlay and cfg.overlay_show_labels and not cfg.overlay_show_conf:
-                                overlay.draw_text(x0 + 30, y0 + 7, str_cls)
+                                str_cls = self.cls_model_data.get(cls.item(), '')
 
-                            # Confidence labels (only draw once)
-                            if cfg.show_window and cfg.show_conf:
-                                conf_text = '{} {:.2f}'.format(str_cls, conf.item())
-                                cv2.putText(image_np, conf_text, (x0, y0 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 1, cv2.LINE_AA)
-                            elif cfg.show_overlay and cfg.overlay_show_conf:
-                                overlay.draw_text(x0 + 45, y0 + 7, conf_text)
+                                # Text labels and confidence labels
+                                if cfg.show_window:
+                                    if cfg.show_labels:
+                                        text = str_cls if not cfg.show_conf else f"{str_cls} {conf:.2f}"
+                                        cv2.putText(image_np, text, (x0, y0 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 1, cv2.LINE_AA)
+                                if cfg.show_overlay:
+                                    if cfg.overlay_show_labels:
+                                        text = str_cls if not cfg.overlay_show_conf else f"{str_cls} {conf:.2f}"
+                                        overlay.draw_text(x0 + 30, y0 + 7, text)  # Adjusted for overlay
+                                    # Confidence labels (only draw once)
+                                    if cfg.show_window and cfg.show_conf:
+                                        conf_text = '{} {:.2f}'.format(str_cls, conf.item())
+                                        cv2.putText(image_np, conf_text, (x0, y0 - 5), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 200, 0), 1, cv2.LINE_AA)
+                                    elif cfg.show_overlay and cfg.overlay_show_conf:
+                                        overlay.draw_text(x0 + 45, y0 + 7, conf_text)
 
             
             # speed
