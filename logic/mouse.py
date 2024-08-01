@@ -1,138 +1,40 @@
+#[mouse.py]
 import torch
 import win32con, win32api
 import torch.nn as nn
 import time
-from ultralytics.trackers.utils.kalman_filter import KalmanFilterXYWH as KalmanFilterXYAH
+from logic.equations import Equations
 import numpy as np
-import scipy.linalg
 from logic.config_watcher import cfg
 from logic.visual import visuals
 from logic.shooting import shooting
 from logic.buttons import Buttons
 
+from logic.rzctl import RZCONTROL
+import os
+
+
+
+
+
 if cfg.arduino_move or cfg.arduino_shoot:
     from logic.arduino import arduino
+#(neural network disabled until update)
+#class Mouse_net(nn.Module):
+ #   def __init__(self, arch):
+  #      super(Mouse_net, self).__init__()
+   #     self.fc1 = nn.Linear(10, 128, arch)
+    #    self.fc2 = nn.Linear(128, 128, arch)
+     #   self.fc3 = nn.Linear(128, 64, arch)
+      #  self.fc4 = nn.Linear(64, 2, arch)
 
-class Mouse_net(nn.Module):
-    def __init__(self, arch):
-        super(Mouse_net, self).__init__()
-        self.fc1 = nn.Linear(10, 128, arch)
-        self.fc2 = nn.Linear(128, 128, arch)
-        self.fc3 = nn.Linear(128, 64, arch)
-        self.fc4 = nn.Linear(64, 2, arch)
+    #def forward(self, x):
+     #   x = torch.relu(self.fc1(x))
+      #  x = torch.relu(self.fc2(x))
+       # x = torch.relu(self.fc3(x))
+        #x = self.fc4(x)
+        #return x
 
-    def forward(self, x):
-        x = torch.relu(self.fc1(x))
-        x = torch.relu(self.fc2(x))
-        x = torch.relu(self.fc3(x))
-        x = self.fc4(x)
-        return x
-class KalmanFilterXYWH(KalmanFilterXYAH):  # Create a subclass
-    def __init__(self):
-        ndim, dt = 4, 1.
-        self._motion_mat = np.eye(2 * ndim, 2 * ndim)
-        for i in range(ndim):
-            self._motion_mat[i, ndim + i] = dt
-        self._update_mat = np.eye(ndim, 2 * ndim)
-        self._std_weight_position = 1. / 20
-        self._std_weight_velocity = 1. / 160
-
-    def initiate(self, measurement: np.ndarray) -> tuple:
-
-        mean_pos = measurement
-        mean_vel = np.zeros_like(mean_pos)
-        mean = np.r_[mean_pos, mean_vel]
-
-        std = [
-            2 * self._std_weight_position * measurement[2],
-            2 * self._std_weight_position * measurement[3],
-            10 * self._std_weight_velocity * measurement[2],
-            10 * self._std_weight_velocity * measurement[3],
-            1e-2,
-            1e-2,
-            1e-5,
-            1e-5,
-        ]
-        covariance = np.diag(np.square(std))
-        return mean, covariance
-
-    def project(self, mean: np.ndarray, covariance: np.ndarray) -> tuple:
-        std = [
-            self._std_weight_position * mean[3], self._std_weight_position * mean[3], 1e-1,
-            self._std_weight_position * mean[3]]
-        innovation_cov = np.diag(np.square(std))
-
-        mean = np.dot(self._update_mat, mean)
-        covariance = np.linalg.multi_dot((self._update_mat, covariance, self._update_mat.T))
-        return mean, covariance + innovation_cov
-   
-    def predict(self, mean: np.ndarray, covariance: np.ndarray) -> tuple:
-        std_pos = [
-            self._std_weight_position * mean[3], self._std_weight_position * mean[3], 1e-2,
-            self._std_weight_position * mean[3]]
-        std_vel = [
-            self._std_weight_velocity * mean[3], self._std_weight_velocity * mean[3], 1e-5,
-            self._std_weight_velocity * mean[3]]
-        motion_cov = np.diag(np.square(np.r_[std_pos, std_vel]))
-
-        mean = np.dot(mean, self._motion_mat.T)
-        covariance = np.linalg.multi_dot((self._motion_mat, covariance, self._motion_mat.T)) + motion_cov
-
-        return mean, covariance
-    
-    def multi_predict(self, mean: np.ndarray, covariance: np.ndarray) -> tuple:
-
-        std_pos = [
-            self._std_weight_position * mean[:, 3], self._std_weight_position * mean[:, 3],
-            1e-2 * np.ones_like(mean[:, 3]), self._std_weight_position * mean[:, 3]]
-        std_vel = [
-            self._std_weight_velocity * mean[:, 3], self._std_weight_velocity * mean[:, 3],
-            1e-5 * np.ones_like(mean[:, 3]), self._std_weight_velocity * mean[:, 3]]
-        sqr = np.square(np.r_[std_pos, std_vel]).T
-
-        motion_cov = [np.diag(sqr[i]) for i in range(len(mean))]
-        motion_cov = np.asarray(motion_cov)
-
-        mean = np.dot(mean, self._motion_mat.T)
-        left = np.dot(self._motion_mat, covariance).transpose((1, 0, 2))
-        covariance = np.dot(left, self._motion_mat.T) + motion_cov
-
-        return mean, covariance
-    def update(self, mean: np.ndarray, covariance: np.ndarray, measurement: np.ndarray) -> tuple:
-
-        projected_mean, projected_cov = self.project(mean, covariance)
-
-        chol_factor, lower = scipy.linalg.cho_factor(projected_cov, lower=True, check_finite=False)
-        kalman_gain = scipy.linalg.cho_solve((chol_factor, lower),
-                                             np.dot(covariance, self._update_mat.T).T,
-                                             check_finite=False).T
-        innovation = measurement - projected_mean
-
-        new_mean = mean + np.dot(innovation, kalman_gain.T)
-        new_covariance = covariance - np.linalg.multi_dot((kalman_gain, projected_cov, kalman_gain.T))
-        return new_mean, new_covariance
-
-    def gating_distance(self,
-                        mean: np.ndarray,
-                        covariance: np.ndarray,
-                        measurements: np.ndarray,
-                        only_position: bool = False,
-                        metric: str = 'maha') -> np.ndarray:
-
-        mean, covariance = self.project(mean, covariance)
-        if only_position:
-            mean, covariance = mean[:2], covariance[:2, :2]
-            measurements = measurements[:, :2]
-
-        d = measurements - mean
-        if metric == 'gaussian':
-            return np.sum(d * d, axis=1)
-        elif metric == 'maha':
-            cholesky_factor = np.linalg.cholesky(covariance)
-            z = scipy.linalg.solve_triangular(cholesky_factor, d.T, lower=True, check_finite=False, overwrite_b=True)
-            return np.sum(z * z, axis=0) 
-        else:
-            raise ValueError('Invalid distance metric')
 
 class MouseThread:
     def __init__(self):
@@ -140,6 +42,7 @@ class MouseThread:
         self.mouse_sensitivity = cfg.mouse_sensitivity
         self.fov_x = cfg.mouse_fov_width
         self.fov_y = cfg.mouse_fov_height
+        self.mouse_speed_factor = 1
         self.disable_prediction = cfg.disable_prediction
         self.prediction_interval = cfg.prediction_interval
         self.bScope_multiplier = cfg.bScope_multiplier
@@ -149,29 +52,42 @@ class MouseThread:
         self.center_y = self.screen_height / 2
         self.mean = None
         self.covariance = None
-        self.kalman_filter = KalmanFilterXYWH()
+        self.equations_filter = Equations()
         self.prev_x = 0
         self.prev_y = 0
         self.prev_time = None
-        
+        self.magnet_distance_threshold = cfg.magnet_distance_threshold
+        self.magnet_pull_strength = cfg.magnet_pull_strength
+        self.close_smooth_ammount = cfg.close_smooth_ammount
+        self.close_smooth_distance = cfg.close_smooth_distance
         self.bScope = False
-        
+        self.magnet_pull = True
+        self.adjust_x = 100
+        self.adjust_y = 60
         self.arch = self.get_arch()
         
         if cfg.mouse_ghub:
             from logic.ghub import gHub
             self.ghub = gHub
+        
+        if cfg.razer_mouse:
+            dll_name = "rzctl.dll" 
+            script_directory = os.path.dirname(os.path.abspath(__file__))
+            dll_path = os.path.join(script_directory, dll_name)
+            self.rzr = RZCONTROL(dll_path)
+            if not self.rzr.init():
+                print("Failed to initialize rzctl")
             
-        if cfg.AI_mouse_net:
-            self.device = torch.device(self.arch)
-            self.model = Mouse_net(arch=self.arch).to(self.device)
-            try:
-                self.model.load_state_dict(torch.load('mouse_net.pth', map_location=self.device))
-            except Exception as e:
-                print(e)
-                print('Please train AI mouse model, or download latest trained mouse_net.pth model from repository and place in base folder. Instruction here: https://github.com/SunOner/mouse_net')
-                exit()
-            self.model.eval()
+        # if cfg.AI_mouse_net:
+        #    self.device = torch.device(self.arch)
+         #   self.model = Mouse_net(arch=self.arch).to(self.device)
+          #  try:
+           #     self.model.load_state_dict(torch.load('mouse_net.pth', map_location=self.device))
+        #     except Exception as e:
+         #       print(e)
+          #      print('Please train AI mouse model')
+           #     exit()
+            #self.model.eval()
 
     def get_arch(self):
         if cfg.AI_enable_AMD:
@@ -181,13 +97,14 @@ class MouseThread:
         return f'cuda:{cfg.AI_device}'
 
     def process_data(self, data):
-        target_x, target_y, target_w, target_h, target_cls = data
+        target_x, target_y, target_w, target_h, target_cls, player_box_sizes, head_box_sizes = data
+
         target_center_x = target_x + (target_w / 2)
         target_center_y = target_y + (target_h / 2)
 
-        if cfg.AI_mouse_net == False:
-            if (cfg.show_window and cfg.show_target_line) or (cfg.show_overlay and cfg.show_target_line):
-                visuals.draw_target_line(target_x, target_y, target_cls)
+        #if cfg.AI_mouse_net == False:
+         #   if (cfg.show_window and cfg.show_target_line) or (cfg.show_overlay and cfg.show_target_line):
+          #      visuals.draw_target_line(target_x, target_y, target_cls)
 
         # Check bScope with original target coordinates
         self.bScope = self.check_target_in_scope(target_x, target_y, target_w, target_h, self.bScope_multiplier) if cfg.auto_shoot or cfg.triggerbot else False
@@ -199,17 +116,17 @@ class MouseThread:
             # Prediction and update using NumPy
             measurement = np.array([target_x, target_y, target_w, target_h])
             if self.mean is None or self.covariance is None:
-                self.mean, self.covariance = self.kalman_filter.initiate(measurement)
-            self.mean, self.covariance = self.kalman_filter.predict(self.mean, self.covariance)
-            self.mean, self.covariance = self.kalman_filter.update(self.mean, self.covariance, measurement)
+                self.mean, self.covariance = self.equations_filter.initiate(measurement)
+            self.mean, self.covariance = self.equations_filter.predict(self.mean, self.covariance)
+            self.mean, self.covariance = self.equations_filter.update(self.mean, self.covariance, measurement)
 
             predicted_x, predicted_y = self.mean[:2]
         else:
             predicted_x, predicted_y = target_center_x, target_center_y # if prediction is disabled use the current target_center
         
         # Calculate movement for both original and predicted positions
-        move_x_raw, move_y_raw = self.calc_movement(target_center_x, target_center_y, target_w, target_h, target_cls)  
-        move_x, move_y = self.calc_movement(predicted_x, predicted_y, target_w, target_h, target_cls) 
+        move_x_raw, move_y_raw = self.calc_movement(target_center_x, target_center_y, target_w, target_h, target_cls, player_box_sizes, head_box_sizes)  
+        move_x, move_y = self.calc_movement(predicted_x, predicted_y, target_w, target_h, target_cls, player_box_sizes, head_box_sizes) 
 
         if (cfg.show_window and cfg.show_history_points) or (cfg.show_overlay and cfg.show_history_points):
             visuals.draw_history_point_add_point(move_x_raw, move_y_raw)  # Show original position in history
@@ -220,63 +137,130 @@ class MouseThread:
         shooting.queue.put((self.bScope, self.get_shooting_key_state()))
         self.move_mouse(move_x, move_y)  # Move based on the predicted position
     
-    def calc_movement(self, target_x, target_y, target_w, target_h, target_cls):
-        measurement = np.array([target_x, target_y, target_w, target_h])
-        if self.mean is None or self.covariance is None:
-            self.mean, self.covariance = self.kalman_filter.initiate(measurement)
+    def calc_movement(self, target_x, target_y, target_w, target_h, target_cls, player_box_sizes, head_box_sizes): 
+        #if not cfg.AI_mouse_net:
+            # Target center calculation
+            target_center_x = target_x + target_w / 2
+            target_center_y = target_y + target_h / 2
 
-        self.mean, self.covariance = self.kalman_filter.predict(self.mean, self.covariance)
-        smoothed_measurement = self.kalman_filter.update(self.mean, self.covariance, measurement)[0]
-        self.mean[:2] = smoothed_measurement[:2]
+            offset_x = target_center_x - self.center_x
+            offset_y = target_center_y - self.center_y
 
-        target_x, target_y = smoothed_measurement[:2]  
+            # Calculate distance to the target
+            distance_to_target = np.sqrt(offset_x**2 + offset_y**2)
+                    # Calculate target's angle and consider its size
+            target_angle = np.arctan2(offset_y, offset_x) 
+            target_angle_degrees = np.degrees(target_angle)
 
-        if not cfg.AI_mouse_net:
+            # Adjust angle based on target size (experiment with different scaling factors)
+            angle_adjustment = (target_w / self.screen_width) * 5  # Example scaling 
+            target_angle_degrees += angle_adjustment if offset_x < 0 else -angle_adjustment 
+
+            # Dynamic speed adjustment based on distance and target size
+            base_speed_factor = self.mouse_speed_factor
+
+            # Adjust speed based on distance (similar to before)
+            if distance_to_target > 200:   # Far away
+                speed_factor = base_speed_factor
+            elif distance_to_target > 50:  # Closer
+                speed_factor = base_speed_factor * (0.5 + 0.5 * (distance_to_target - 50) / 150) 
+            else:                          # Very close
+                speed_factor = base_speed_factor * 0.2  
+
+            # Adjust speed based on box size (different logic for head and player)
+            if target_cls == 7:  # Headshot 
+                avg_head_box_area = np.mean([w * h for w, h in head_box_sizes]) if head_box_sizes else 0
+                target_box_area = target_w * target_h
+                box_size_factor = target_box_area / avg_head_box_area if avg_head_box_area > 0 else 1.0
+            else:  # Player
+                avg_player_box_area = np.mean([w * h for w, h in player_box_sizes]) if player_box_sizes else 0
+                target_box_area = target_w * target_h
+                box_size_factor = target_box_area / avg_player_box_area if avg_player_box_area > 0 else 1.0
+
+            speed_factor *= box_size_factor 
+
+            # Adjust speed based on player box size (if player detected)
+            if target_cls != 7:  # Assuming class 7 is for heads
+                avg_player_box_area = np.mean([w * h for w, h in player_box_sizes]) if player_box_sizes else 0
+                target_box_area = target_w * target_h
+                box_size_factor = target_box_area / avg_player_box_area if avg_player_box_area > 0 else 1.0
+                speed_factor *= box_size_factor  # Scale speed based on box size relative to average
+
+            # Calculate target's angle relative to the character
+            target_angle = np.arctan2(offset_y, offset_x)  # In radians
+            target_angle_degrees = np.degrees(target_angle)
+            measurement = np.array([target_x, target_y, target_w, target_h])
+            if self.mean is None or self.covariance is None:
+                self.mean, self.covariance = self.equations_filter.initiate(measurement)
+            self.mean, self.covariance = self.equations_filter.predict(self.mean, self.covariance)
+            smoothed_measurement = self.equations_filter.update(self.mean, self.covariance, measurement)[0]
+            self.mean[:2] = smoothed_measurement[:2]
+            target_x, target_y = smoothed_measurement[:2]
+
+        #if not cfg.AI_mouse_net:
             offset_x = target_x - self.center_x
             offset_y = target_y - self.center_y
 
-            # Calculate target velocity based on Kalman filter
-            target_vel_x = self.mean[4] # velocity x from kalman_filter
-            target_vel_y = self.mean[5] # velocity y from kalman_filter
-
-            # Predict future position of the target
-            predicted_target_x = target_x + target_vel_x * cfg.prediction_interval  # cfg.prediction_interval is in seconds
+            target_vel_x = self.mean[4] # velocity x from equations_filter
+            target_vel_y = self.mean[5] # velocity y from equations_filter
+            predicted_target_x = target_x + target_vel_x * cfg.prediction_interval
             predicted_target_y = target_y + target_vel_y * cfg.prediction_interval
 
-            # Adjust offset to lead the target
             offset_x = predicted_target_x - self.center_x
             offset_y = predicted_target_y - self.center_y
 
-
             degrees_per_pixel_x = self.fov_x / self.screen_width
             degrees_per_pixel_y = self.fov_y / self.screen_height
-
+            
             mouse_move_x = offset_x * degrees_per_pixel_x
             move_x = (mouse_move_x / 360) * (self.dpi * (1 / self.mouse_sensitivity))
 
             mouse_move_y = offset_y * degrees_per_pixel_y
             move_y = (mouse_move_y / 360) * (self.dpi * (1 / self.mouse_sensitivity))
-
-            return move_x, move_y
-        else:
-            input_data = [
-                self.screen_width,
-                self.screen_height,
-                self.center_x,
-                self.center_y,
-                self.dpi,
-                self.mouse_sensitivity,
-                self.fov_x,
-                self.fov_y,
-                target_x,
-                target_y
-            ]
+        
+            # Magnet Pull & Exponential Smoothing (Corrected)
+            target_center_x = target_x + target_w / 2
+            target_center_y = target_y + target_h / 2
+            target_distance = np.linalg.norm([target_center_x - self.center_x, target_center_y - self.center_y])
             
-        input_data = torch.tensor([self.screen_width, self.screen_height, target_x, target_y, target_w, target_h], 
-                                  dtype=torch.float32).to(self.device)
-        with torch.no_grad():
-            move_x, move_y = self.model(input_data).cpu().numpy()
-        return move_x, move_y
+            if self.magnet_pull:
+                if target_distance < self.magnet_distance_threshold:
+                    # Calculate the scaling factor for magnet pull strength
+                    pull_factor = 1 - (target_distance / self.magnet_distance_threshold)
+                    
+                    # Apply the magnet pull to accelerate movement
+                    move_x *= 1 + pull_factor * self.magnet_pull_strength
+                    move_y *= 1 + pull_factor * self.magnet_pull_strength
+                    
+                if target_distance <= self.close_smooth_distance: #Within 2 pixel of the center
+                    self.magnet_pull = False
+                    smoothing_factor = self.close_smooth_ammount  # You can adjust this factor to control the smoothing strength
+                    move_x = smoothing_factor * self.prev_x + (1 - smoothing_factor) * move_x
+                    move_y = smoothing_factor * self.prev_y + (1 - smoothing_factor) * move_y
+                    
+
+            self.prev_x, self.prev_y = move_x, move_y  # Store for next 
+            move_x = move_x * (self.adjust_x * .01)
+            move_y = move_y * (self.adjust_y * .01)
+            return move_x, move_y
+        # Neural Network disabled until update
+        #else:
+        #    input_data = [
+         #       self.screen_width,
+          #     self.center_x,
+           #     self.center_y,
+            #    self.dpi,
+             #   self.mouse_sensitivity,
+              #  self.fov_x,
+               # self.fov_y,
+        #        target_x,
+         #       target_y  ]
+            
+    #    input_data = torch.tensor([self.screen_width, self.screen_height, target_x, target_y, target_w, target_h, target_cls, player_box_sizes, head_box_sizes], 
+     #                             dtype=torch.float32).to(self.device)
+      #  with torch.no_grad():
+       #     move_x, move_y = self.model(input_data).cpu().numpy()
+        #return move_x, move_y
 
         
     def move_mouse(self, x, y):
@@ -324,3 +308,4 @@ class MouseThread:
         self.center_y = self.screen_height / 2
                 
 mouse = MouseThread()
+#[/mouse.py]
