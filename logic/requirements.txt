@@ -1,0 +1,14 @@
+cuda_python
+bettercam
+numpy
+pywin32
+ultralytics
+screeninfo
+asyncio
+onnxruntime
+onnxruntime-gpu
+pyserial
+requests
+opencv-python
+packaging
+scipy
