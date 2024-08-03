@@ -12,5 +12,3 @@ requests
 opencv-python
 packaging
 scipy
-interception
-interception-python

@@ -274,14 +274,14 @@ with HELPER:
              # logic
             './logic/arduino.py', './logic/capture.py', './logic/config_watcher.py', './logic/game.yaml', './logic/ghub_mouse.dll',
             './logic/buttons.py', './logic/overlay.py', './logic/mouse.py', './logic/visual.py', './logic/frame_parser.py', './logic/hotkeys_watcher.py',
-            './logic/shooting.py', './logic/checks.py',
+            './logic/shooting.py', './logic/checks.py', './logic/rzrctl.dll', './logic/rzrctl.py'
             # media
             './media/aimbot.png', './media/cuda.png', './media/one.gif', './media/python.png', './media/tests/test_det.mp4',
             # docs
             './docs/en/helper_en.md', './docs/en/install_guide_en.md', './docs/en/questions_en.md',
             './docs/ru/helper_ru.md', './docs/ru/install_guide_ru.md', './docs/ru/questions_ru.md',
             # models
-            './models/9.pt'
+            './models/60.pt'
         ]
 
         for temp_file in temp_aimbot_files:
@@ -411,6 +411,8 @@ with CONFIG:
         config.set('Capture Methods', 'bettercam_monitor_id', str(bettercam_monitor_id))
         config.set('Capture Methods', 'bettercam_gpu_id', str(bettercam_gpu_id))
 
+
+
     # Aim
     st.header("Aim")
     body_y_offset = st.slider(label="Body Y offset", min_value=-0.99, max_value=0.99, value=config.getfloat('Aim', 'body_y_offset'))
@@ -443,15 +445,29 @@ with CONFIG:
     # Mouse
     st.header("Mouse")
     mouse_dpi = st.number_input("Mouse DPI", min_value=100, step=100, value=config.getint('Mouse', 'mouse_dpi'))
+    mouse_fov_width = st.number_input("Mouse FOV width", value=config.getint('Mouse', 'mouse_fov_width'))
+    mouse_fov_height = st.number_input("Mouse FOV height", value=config.getint('Mouse', 'mouse_fov_height'))
     mouse_sensitivity = st.number_input("Mouse sensitivity", min_value=0.1, value=config.getfloat('Mouse', 'mouse_sensitivity'))
+    magnet_distance_threshold = st.number_input("magnet_distance_threshold", value=config.getfloat('Mouse', 'magnet_distance_threshold'))
+    magnet_pull_strength = st.number_input("magnet_pull_strength ", value=config.getfloat('Mouse', 'magnet_pull_strength'))
+    close_smooth_ammount = st.number_input("close_smooth_ammount", value=config.getfloat('Mouse', 'close_smooth_ammount'))
+    close_smooth_distance = st.number_input("close smooth distance", value=config.getfloat('Mouse', 'close_smooth_distance'))
     mouse_lock_target = st.checkbox("Mouse lock target", value=config.getboolean('Mouse', 'mouse_lock_target'))
     mouse_auto_aim = st.checkbox("Mouse auto aim", value=config.getboolean('Mouse', 'mouse_auto_aim'))
     mouse_ghub = st.checkbox("Mouse GHUB", value=config.getboolean('Mouse', 'mouse_ghub'))
+    razer_mouse = st.checkbox("Razer mouse", value=config.getboolean('Mouse', 'razer_mouse'))
     config.set('Mouse', 'mouse_dpi', str(mouse_dpi))
     config.set('Mouse', 'mouse_sensitivity', str(mouse_sensitivity))
+    config.set('Mouse', 'mouse_fov_width', str(mouse_fov_width))
+    config.set('Mouse', 'mouse_fov_height', str(mouse_fov_height))
+    config.set('Mouse', 'magnet_distance_threshold', str(magnet_distance_threshold))
+    config.set('Mouse', 'magnet_pull_strength', str(magnet_pull_strength))
+    config.set('Mouse', 'close_smooth_ammount', str(close_smooth_ammount))
+    config.set('Mouse', 'close_smooth_distance', str(close_smooth_distance))
     config.set('Mouse', 'mouse_lock_target', str(mouse_lock_target))
     config.set('Mouse', 'mouse_auto_aim', str(mouse_auto_aim))
     config.set('Mouse', 'mouse_ghub', str(mouse_ghub))
+    config.set('Mouse', 'razer_mouse', str(razer_mouse))
 
     # Shooting
     st.header("Shooting")
@@ -508,13 +524,13 @@ with CONFIG:
     devices = ["cpu", "0", "1", "2", "3", "4", "5"]
     AI_device = st.selectbox(label="AI device", options=devices, index=devices.index(config.get('AI', 'AI_device')))
     AI_enable_AMD = st.checkbox("AI enable AMD", value=config.getboolean('AI', 'AI_enable_AMD'))
-    AI_mouse_net = st.checkbox("AI mouse net", value=config.getboolean('AI', 'AI_mouse_net'))
-    config.set('AI', 'AI_model_name', str(AI_model_name))
+    #(disabled until update)AI_mouse_net = st.checkbox("AI mouse net", value=config.getboolean('AI', 'AI_mouse_net'))
+    config.set('AI', 'AI_model_name', AI_model_name)
     config.set('AI', 'AI_model_image_size', str(AI_model_image_size))
     config.set('AI', 'AI_conf', str(AI_conf))
     config.set('AI', 'AI_device', AI_device)
     config.set('AI', 'AI_enable_AMD', str(AI_enable_AMD))
-    config.set('AI', 'AI_mouse_net', str(AI_mouse_net))
+    #(disabled until update)config.set('AI', 'AI_mouse_net', str(AI_mouse_net))
 
     # Overlay
     st.header("Overlay")

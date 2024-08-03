@@ -1,12 +1,14 @@
 from ultralytics import YOLO
 import torch
-
 from logic.config_watcher import cfg
 from logic.capture import capture
 from logic.visual import visuals
 from logic.frame_parser import frameParser
 from logic.hotkeys_watcher import hotkeys_watcher
 from logic.checks import run_checks
+
+
+
 
 @torch.inference_mode()
 def perform_detection(model, image):
@@ -29,8 +31,8 @@ def perform_detection(model, image):
         show_labels=False,
         show_conf=False,
         save=False,
-        show=False)
-        
+        show=False,
+    )
 def init():
     run_checks()
     

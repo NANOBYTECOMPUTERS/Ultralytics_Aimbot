@@ -1,7 +1,7 @@
 <div align="center">
 
-# Ultralytics Aimbot was inspired and started from Sunone Project
-Due to the large differences in code as well as mine consistantly changing it is branched to its own repository
+# Yolov10_Aimbot was developed from Sunones Project
+Due to the large differences in features and functions as well as mine consistantly changing it is branching to its own repository soon
 
 [![Python Version](https://img.shields.io/badge/Python-3.11.6-FFD43B?logo=python)]
 
@@ -11,18 +11,13 @@ Due to the large differences in code as well as mine consistantly changing it is
       <img width="75%" src="https://raw.githubusercontent.com/SunOner/sunone_aimbot/main/media/demo.gif"></a>
   </p>
 </div>
-#If you are feeling generous buy me a coffee, spent alot of hours working on stuff.
-<br></br>
-PayPal:  https://www.paypal.com/donate/?business=TZFWU8AQRYZY6&no_recurring=0&currency_code=USD 
-<br></br>
->CashApp: $DonArrington 
-<br></br>
->Bitcoin: 3Cysfhcyh7Jejc1bxJN3sVo9unkrnZPrYE
-<br></br>
->Dogecoin: DGQPgt7n7DgjHygwa67XPExi4wyX7zZTC4
-<br></br>
->Ethereum: 0x2c8644b5731eF3021b5de7EbE5Df3ec936C11Dc7
-<br></br>
+If you are feeling generous buy me a cofee, spent alot of hours working on stuff.
+PayPal:  https://www.paypal.com/donate/?business=TZFWU8AQRYZY6&no_recurring=0&currency_code=USD # Replace with a single Buy Me a Coffee username
+CashApp: $DonArrington 
+Bitcoin: 3Cysfhcyh7Jejc1bxJN3sVo9unkrnZPrYE
+Dogecoin: DGQPgt7n7DgjHygwa67XPExi4wyX7zZTC4
+Ethereum: 0x2c8644b5731eF3021b5de7EbE5Df3ec936C11Dc7
+
 
 ## Overview
 an AI-powered aim bot for first-person shooter games. It leverages the YOLOv8 and YOLOv10 models, PyTorch, and various other tools to automatically target and aim at enemies within the game. The AI model in repository has been trained on more than 30,000 images from popular first-person shooter games like Warface, Destiny 2, Battlefield (all series), Fortnite, The Finals, CS2 and more.
@@ -60,7 +55,7 @@ Before you get started, make sure you have the following prerequisites installed
   <thead><tr><th>CUDA:</th><td>12.4</td></tr></thead>
   <thead><tr><th>TensorRT:</th><td>10.0.1</td></tr></thead>
   <thead><tr><th>Ultralytics:</th><td>8.2.64</td></tr></thead>
-  <thead><tr><th>GitHub AI Model:</th><td> 9 (YOLOv10)</td></tr></thead>
+  <thead><tr><th>GitHub AI Model:</th><td>0.4.1 (YOLOv8)</td></tr></thead>
   <thead><tr><th>Boosty AI Model:</th><td>0.6.0 (YOLOv10)</td></tr></thead>
 </table>
 
