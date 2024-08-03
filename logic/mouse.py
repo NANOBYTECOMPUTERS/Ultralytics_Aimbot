@@ -306,6 +306,10 @@ class MouseThread:
         self.screen_height = cfg.detection_window_height
         self.center_x = self.screen_width / 2
         self.center_y = self.screen_height / 2
+        self.magnet_distance_threshold = cfg.magnet_distance_threshold
+        self.magnet_pull_strength = cfg.magnet_pull_strength
+        self.close_smooth_ammount = cfg.close_smooth_ammount
+        self.close_smooth_distance = cfg.close_smooth_distance
                 
 mouse = MouseThread()
 #[/mouse.py]
