@@ -44,11 +44,16 @@ class Config():
         self.config_Mouse = self.config['Mouse']
         self.mouse_dpi = int(self.config_Mouse['mouse_dpi'])
         self.mouse_sensitivity = float(self.config_Mouse['mouse_sensitivity'])
+        self.magnet_distance_threshold = float(self.config_Mouse['magnet_distance_threshold'])
+        self.magnet_pull_strength = float(self.config_Mouse['magnet_pull_strength'])
+        self.close_smooth_ammount = float(self.config_Mouse['close_smooth_ammount'])
+        self.close_smooth_distance = float(self.config_Mouse['close_smooth_distance'])
         self.mouse_fov_width = int(self.config_Mouse['mouse_fov_width'])
         self.mouse_fov_height = int(self.config_Mouse['mouse_fov_height'])
         self.mouse_lock_target = self.config_Mouse.getboolean('mouse_lock_target')
         self.mouse_auto_aim = self.config_Mouse.getboolean('mouse_auto_aim')
         self.mouse_ghub = self.config_Mouse.getboolean('mouse_ghub')
+        self.razer_mouse = self.config_Mouse.getboolean('razer_mouse')
         # Shooting
         self.config_Shooting = self.config['Shooting']
         self.auto_shoot = self.config_Shooting.getboolean('auto_shoot')
