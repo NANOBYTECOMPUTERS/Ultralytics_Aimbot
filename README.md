@@ -12,11 +12,17 @@ Due to the large differences in features and functions as well as mine consistan
   </p>
 </div>
 If you are feeling generous buy me a cofee, spent alot of hours working on stuff.
-PayPal:  https://www.paypal.com/donate/?business=TZFWU8AQRYZY6&no_recurring=0&currency_code=USD # Replace with a single Buy Me a Coffee username
+<br>
+PayPal:  https://www.paypal.com/donate/?business=TZFWU8AQRYZY6&no_recurring=0&currency_code=USD
+<br>
 CashApp: $DonArrington 
+<br>
 Bitcoin: 3Cysfhcyh7Jejc1bxJN3sVo9unkrnZPrYE
+<br>
 Dogecoin: DGQPgt7n7DgjHygwa67XPExi4wyX7zZTC4
+<br>
 Ethereum: 0x2c8644b5731eF3021b5de7EbE5Df3ec936C11Dc7
+<br>
 
 
 ## Overview
